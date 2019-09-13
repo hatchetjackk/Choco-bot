@@ -1,0 +1,6 @@
+
+files/credentials\.json
+
+\.idea/
+
+cogs/__pycache__/
