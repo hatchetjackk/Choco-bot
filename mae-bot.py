@@ -76,11 +76,7 @@ async def on_command_error(ctx, error):
         await ctx.send(f'You do not have permission to run this command.', delete_after=10)
     elif isinstance(error, discord.errors.NotFound):
         pass
-    # elif isinstance(error, discord.errors.):
-    #     pass
     else:
-        # owner = client.get_user(193416878717140992)
-        # await ctx.send(embed=tools.single_embed_tooltip(f'We seem to have encountered an error. [{error}].\nI am notifying {owner.mention}!'))
         print(f'{ctx.author.display_name} encountered a {type(error)} error running {ctx.command} in {ctx.channel.name}: {error}')
 
 
