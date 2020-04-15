@@ -6,7 +6,7 @@ import util.db as database
 import util.tools as tools
 from discord.ext import commands
 
-rep_cmds = ['rep', 'pos', 'neg', 'repboard', 'karma', 'karmaboard', 'thanks']
+rep_cmds = ['rep', 'pos', 'neg', 'repboard', 'karma', 'karmaboard']
 dms_cmds = ['create', 'close', 'end', 'join', 'leave', 'menu', 'send', 'dodo', 'show', 'notify', 'welcome', 'kick',
             'ban', 'unban', 'bans']
 fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd']
@@ -60,13 +60,7 @@ class Help(commands.Cog):
     async def help2_embed(self, ctx, args, description, aliases=None):
         prefix = database.get_prefix(ctx.guild)[0]
         func = inspect.stack()[1][3]
-        title = f'{func.capitalize()} Help'
-        desc = prefix + func
-        if args is not None:
-            desc += f' {args}'
-        if func == 'thanks':
-            desc = f'{func} {args}'
-        embed = discord.Embed(title=title, color=discord.Color.green(), description=f'```\n{desc}```')
+        embed = discord.Embed(title=func, color=discord.Color.green(), description=f'```\n{prefix}{func} {args}```')
         embed.add_field(name=f'> Description', value=description, inline=False)
         if aliases is not None:
             if type(aliases) == list:
@@ -83,78 +77,91 @@ class Help(commands.Cog):
     @help_page.group()
     async def bug(self, ctx):
         args = 'message'
-        description = 'Send a bug report to the developer. Add a screenshot of the bug to the command when possible. ' \
-                      'A message is required.'
+        description = 'Send a bug report to the developer. Add a screenshot of the bug to the command when possible.'
         await self.help2_embed(ctx, args, description)
 
     @help_page.group(aliases=['kboard'])
     async def karmaboard(self, ctx):
-        args = None
-        description = 'Get the top 10 karma leaders.'
-        await self.help2_embed(ctx, args, description, self.karmaboard.aliases)
+        prefix = database.get_prefix(ctx.guild)[0]
+        func = inspect.stack()[0][3]
+        help_menu = f'`{prefix}{func}` - Get the top 10 karma leaders.\n' \
+                    f'__aliases__: `kboard`\n\n' \
+                    f'Karma is a point system established around constructive communities. ' \
+                    f'If another member has done something for you please think about giving them ' \
+                    f'karma.'
+        footer = f'Related commands: {", ".join([r for r in rep_cmds if r != func])}'
+        await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
 
     @help_page.group()
     async def karma(self, ctx):
-        args = None
-        description = 'See how much karma you have.'
-        await self.help2_embed(ctx, args, description)
-
-    @help_page.group(aliases=['cheers'])
-    async def thanks(self, ctx):
-        args = '@user'
-        description = 'Give another user karma. You can also use `cheers`. This function is unique as it does **not**' \
-                      'require a prefix.\nAffected by *cooldown*.'
-        await self.help2_embed(ctx, args, description, self.thanks.aliases)
+        prefix = database.get_prefix(ctx.guild)[0]
+        func = inspect.stack()[0][3]
+        help_menu = f'`{prefix}{func}` - Get your current karma.\n' \
+                    f'`thanks @user` - Give a member karma.\n\n' \
+                    f'Karma is a point system established around constructive communities. ' \
+                    f'If another member has done something for you please think about giving them ' \
+                    f'karma.'
+        footer = f'Related commands: {", ".join([r for r in rep_cmds if r != func])}'
+        await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
 
     @help_page.group()
     async def rep(self, ctx):
-        args = '@optional_user'
-        description = 'Get your or the (optional) mentioned user\'s reputation. If you do not want to ping the user, you ' \
-                      'can enter the user\'s ID or type out their username inside of quotes.'
-        await self.help2_embed(ctx, args, description)
+        prefix = database.get_prefix(ctx.guild)[0]
+        func = inspect.stack()[0][3]
+        help_menu = f'`{prefix}{func}` - Get your current reputation.\n' \
+                    f'`{prefix}{func} @user` - Get another user\'s reputation.'
+        footer = f'Related commands: {", ".join([r for r in rep_cmds if r != func])}'
+        await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
 
     @help_page.group()
     async def pos(self, ctx):
-        args = '@user optional_message'
-        description = 'Give a user a positive review which increases their **rep**. The message is optional and appears in ' \
-                      'the review channel if configured. This command is purged immediately after sending.'
-        await self.help2_embed(ctx, args, description)
+        prefix = database.get_prefix(ctx.guild)[0]
+        func = inspect.stack()[0][3]
+        help_menu = f'`{prefix}{func} @user optional_message` - Give a user a positive review.'
+        footer = f'Related commands: {", ".join([r for r in rep_cmds if r != func])}'
+        await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
 
     @help_page.group()
     async def neg(self, ctx):
-        args = '@user required_message'
-        description = 'Give a user a negative review which affects their **rating**. The message is **required** and ' \
-                      'appears in the administrative support channel if configured. This command is purged immediately ' \
-                      'for privacy.'
-        await self.help2_embed(ctx, args, description)
+        prefix = database.get_prefix(ctx.guild)[0]
+        func = inspect.stack()[0][3]
+        help_menu = f'`{prefix}{func} @user required_message` - Give a user a negative review.'
+        footer = f'Related commands: {", ".join([r for r in rep_cmds if r != func])}'
+        await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
 
     @help_page.group(aliases=['rboard'])
     async def repboard(self, ctx):
-        args = None
-        description = 'Get the top 10 best reviewed.'
-        await self.help2_embed(ctx, args, description, self.repboard.aliases)
+        prefix = database.get_prefix(ctx.guild)[0]
+        func = inspect.stack()[0][3]
+        help_menu = f'`{prefix}{func}` - Get the top 10.\n__aliases__: `repboard`'
+        footer = f'Related commands: {", ".join([r for r in rep_cmds if r != func])}'
+        await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
 
     @help_page.group()
     async def create(self, ctx):
-        args = None
-        description = 'Create a new Daisy-Mae Session (DMS). A DMS allows you to create queues and comes with its own ' \
-                      'list of powerful commands that are only usable when hosting. Creating a DMS will generate a ' \
-                      'private channel for you to manage your queue.'
-        await self.help2_embed(ctx, args, description)
+        prefix = database.get_prefix(ctx.guild)[0]
+        func = inspect.stack()[0][3]
+        help_menu = f'`{prefix}{func}` - Create a new Daisy-Mae Session (DMS).' \
+                    f'Great for advertising Turnip prices.'
+        footer = f'Related commands: {", ".join([r for r in dms_cmds if r != func])}'
+        await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
 
     @help_page.group()
     async def close(self, ctx):
-        args = None
-        description = 'Close the doors to your DMS to prevent new guests from joining. This does not end your session. ' \
-                      'Closing your session will shutdown any embeds generated by creating your DMS.'
-        await self.help2_embed(ctx, args, description)
+        prefix = database.get_prefix(ctx.guild)[0]
+        func = inspect.stack()[0][3]
+        help_menu = f'`{prefix}{func}` - Close the doors to your DMS to prevent new guests from joining.'
+        footer = f'Related commands: {", ".join([r for r in dms_cmds if r != func])}'
+        await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
 
     @help_page.group()
     async def end(self, ctx):
-        args = None
-        description = 'Shut down your DMS. Any guests still in your queue will be notified that the session is over. This ' \
-                      'removes any embeds generated by creating your DMS session.'
-        await self.help2_embed(ctx, args, description)
+        prefix = database.get_prefix(ctx.guild)[0]
+        func = inspect.stack()[0][3]
+        help_menu = f'`{prefix}{func}` - Shut down your DMS. Any guests still in the queue will be notified that the ' \
+                    f'session is over.'
+        footer = f'Related commands: {", ".join([r for r in dms_cmds if r != func])}'
+        await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
 
     @help_page.group()
     async def join(self, ctx):
