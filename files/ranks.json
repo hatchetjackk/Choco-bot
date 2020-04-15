@@ -1,0 +1,21 @@
+{
+  "host ranks": {
+    "5+ Positive Reviews": 5,
+    "10+ Positive Reviews": 10,
+    "25+ Positive Reviews": 25,
+    "50+ Positive Reviews": 50,
+    "100+ Positive Reviews": 100,
+    "200+ Positive Reviews": 200,
+    "500+ Positive Reviews": 500
+  },
+  "reviewer ranks": {
+    "Sprout": 0,
+    "Critic": 10,
+    "Reviewer": 20,
+    "Power Reviewer": 50,
+    "Trusted Reviewer": 100,
+    "Expert Reviewer": 200,
+    "God-Like": 300,
+    "Old One": 400
+  }
+}
