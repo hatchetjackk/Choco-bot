@@ -8,3 +8,5 @@ cogs/__pycache__/
 venv/
 
 files/data.db
+
+sessions/
