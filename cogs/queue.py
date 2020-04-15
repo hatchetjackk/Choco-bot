@@ -70,7 +70,9 @@ class DMS(commands.Cog):
                     f'`{prefix}bans` show current list of banned members\n' \
                     f'`{prefix}ban member` ban a `member` and prevent them from joining again \n' \
                     f'`{prefix}unban member` unban a `member`\n\n' \
-                    f'`{prefix}menu` to see these options again'
+                    f'`{prefix}menu` to see these options again\n' \
+                    f'`{prefix}afk num` set an AFK timer that sends the next group every `num` minutes *unless* the group is empty.\n' \
+                    f'`{prefix}afk stop` stop an AFK timer.'
 
         await dms.send(embed=tools.single_embed(host_menu, avatar=self.client.user.avatar_url))
 
@@ -125,7 +127,7 @@ class DMS(commands.Cog):
             break
 
         # get max entries
-        msg = '**Max Participants**\nPlease enter the maximum number of entrants you will accept between `1` and `100`.'
+        msg = '**Number of Groups**\nPlease enter the maximum number of **groups** you will accept between `1` and `100`.'
         await dms.send(embed=tools.single_embed(msg))
         while True:
             while True:
@@ -391,7 +393,7 @@ class DMS(commands.Cog):
                     f'`{prefix}ban member` ban a `member` and prevent them from joining again \n' \
                     f'`{prefix}unban member` unban a `member`\n\n' \
                     f'`{prefix}menu` to see these options again\n' \
-                    f'`{prefix}afk num` set an AFK timer that sends the next group every `num` minutes.\n'\
+                    f'`{prefix}afk num` set an AFK timer that sends the next group every `num` minutes *unless* the group is empty.\n'\
                     f'`{prefix}afk stop` stop an AFK timer.'
         await dms.send(embed=tools.single_embed(host_menu, avatar=self.client.user.avatar_url))
 
@@ -402,85 +404,94 @@ class DMS(commands.Cog):
             return
         prefix = await self.show_prefix(ctx.guild)
 
-        (session_code, host, notification, session, ban_list, message_id,
-         dodo_code, max_entries, per_group, welcome_message, groups, afk, default_minutes) = await self.get_dms_session(ctx.author)
-        if minutes.lower() == 'stop':
-            data = await tools.read_sessions()
-            data[session_code]['afk']['active'] = False
-            await tools.write_sessions(data)
-            await ctx.send(embed=tools.single_embed_neg(f'Your afk session was ended.'))
-            members_to_notify = []
-            for place, member_list in groups.items():
-                for uid in member_list:
-                    members_to_notify.append(uid)
-
-            for uid in members_to_notify:
-                member = self.client.get_user(uid)
-                msg = f'Your host for session **{session_code}** has turned off their **AFK** timer.'
-                await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-            return
-        else:
-            try:
-                minutes = int(minutes)
-                if minutes < 1:
-                    await ctx.send(embed=tools.single_embed_neg(f'Please choose an integer greater than `0`.'))
-                    return
-            except Exception as e:
-                print(e)
-                await ctx.send(embed=tools.single_embed_neg(f'Minutes must be an integer.'))
-                return
-
-            msg = f'Your AFK timer is set to {minutes} minutes. Every {minutes} minutes, a group will be sent ' \
-                  f'until you run out of groups or you enter `{prefix}afk stop`.'
-            await ctx.send(embed=tools.single_embed(msg))
+        try:
             (session_code, host, notification, session, ban_list, message_id,
              dodo_code, max_entries, per_group, welcome_message, groups, afk, default_minutes) = await self.get_dms_session(ctx.author)
-            data = await tools.read_sessions()
-            data[session_code]['afk']['active'] = True
-            data[session_code]['afk']['minutes'] = minutes
-            await tools.write_sessions(data)
-            while True:
+
+            if minutes.lower() == 'stop':
+                data = await tools.read_sessions()
+                data[session_code]['afk']['active'] = False
+                await tools.write_sessions(data)
+                await ctx.send(embed=tools.single_embed_neg(f'Your afk session was ended.'))
+                members_to_notify = []
+                for place, member_list in groups.items():
+                    for uid in member_list:
+                        members_to_notify.append(uid)
+
+                for uid in members_to_notify:
+                    member = self.client.get_user(uid)
+                    msg = f'Your host for session **{session_code}** has turned off their **AFK** timer.'
+                    await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+                return
+            else:
+                try:
+                    minutes = int(minutes)
+                    if minutes < 1:
+                        await ctx.send(embed=tools.single_embed_neg(f'Please choose an integer greater than `0`.'))
+                        return
+                except Exception as e:
+                    print(e)
+                    await ctx.send(embed=tools.single_embed_neg(f'Minutes must be an integer.'))
+                    return
+
+                msg = f'Your AFK timer is set to {minutes} minutes. Every {minutes} minutes, a group will be sent ' \
+                      f'until you run out of groups or you enter `{prefix}afk stop`.'
+                await ctx.send(embed=tools.single_embed(msg))
                 (session_code, host, notification, session, ban_list, message_id,
                  dodo_code, max_entries, per_group, welcome_message, groups, afk, default_minutes) = await self.get_dms_session(ctx.author)
-                if afk is False:
-                    return
-                dms = self.client.get_channel(session)
                 data = await tools.read_sessions()
-                if len(groups) >= 1:
-                    host = discord.utils.get(ctx.guild.members, id=host)
-                    place = list(groups.keys())[0]
-                    await dms.send(embed=tools.single_embed(f'Sending Dodo code to **Group {place}**'))
+                data[session_code]['afk']['active'] = True
+                data[session_code]['afk']['minutes'] = minutes
+                await tools.write_sessions(data)
+                while True:
+                    (session_code, host, notification, session, ban_list, message_id,
+                     dodo_code, max_entries, per_group, welcome_message, groups, afk, default_minutes) = await self.get_dms_session(ctx.author)
+                    if afk is False:
+                        return
+                    dms = self.client.get_channel(session)
+                    data = await tools.read_sessions()
+                    if len(groups) >= 1:
+                        host = discord.utils.get(ctx.guild.members, id=host)
+                        place = list(groups.keys())[0]
+                        if len(groups.get(place)) < 1:
+                            await dms.send(embed=tools.single_embed(f'[**AFK**] Group {place} is empty. Waiting for guest to join before sending.'))
+                            pass
+                        else:
+                            await dms.send(embed=tools.single_embed(f'[**AFK**] Sending Dodo code to **Group {place}**'))
 
-                    for user in data[session_code]['groups'][place]:
-                        member = self.client.get_user(int(user))
-                        msg = f'You have gotten your Session Code for **{host.display_name}\'s** Session!\n' \
-                              f'Please do not forget to leave a review for your host when you finish.\n' \
-                              f'**Dodo Code**: `{dodo_code}`\n'
-                        if welcome_message is not None:
-                            msg += f'\n\n**Your host left you a message!**\n"{welcome_message}"'
-                        if member is not None:
-                            await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-                    del data[session_code]['groups'][place]
-                    await tools.write_sessions(data)
+                            for user in data[session_code]['groups'][place]:
+                                member = self.client.get_user(int(user))
+                                msg = f'You have gotten your Session Code for **{host.display_name}\'s** Session!\n' \
+                                      f'Please do not forget to leave a review for your host when you finish.\n' \
+                                      f'**Dodo Code**: `{dodo_code}`\n'
+                                if welcome_message is not None:
+                                    msg += f'\n\n**Your host left you a message!**\n"{welcome_message}"'
+                                if member is not None:
+                                    await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+                            del data[session_code]['groups'][place]
+                            await tools.write_sessions(data)
 
-                    # notify groups that they have moved up
-                    for place, member_list in data[session_code]['groups'].items():
-                        for uid in member_list:
-                            member = self.client.get_user(uid)
-                            position = list(groups.keys()).index(place) + 1
-                            msg = f'Your group in **Session {session_code}** has moved up! \n' \
-                                  f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.\n' \
-                                  f'**note**: Your host is using an AFK timer. Dodo codes will be sent every {minutes} ' \
-                                  f'minute(s). \n__Please conduct your business as quickly as possible__.'
-                            await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-                    try:
-                        await self.reshow(ctx)
-                    except Exception as e:
-                        print(e)
-                    await asyncio.sleep(60 * default_minutes)
-                else:
-                    await dms.send(embed=tools.single_embed(f'Your AFK session has ended.'))
-                    return
+                            # notify groups that they have moved up
+                            for place, member_list in data[session_code]['groups'].items():
+                                for uid in member_list:
+                                    member = self.client.get_user(uid)
+                                    position = list(groups.keys()).index(place) + 1
+                                    msg = f'Your group in **Session {session_code}** has moved up! \n' \
+                                          f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.\n' \
+                                          f'**note**: Your host is using an AFK timer. Dodo codes will be sent every {minutes} ' \
+                                          f'minute(s). \n__Please conduct your business as quickly as possible__.'
+                                    await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+                            try:
+                                await self.reshow(ctx)
+                            except Exception as e:
+                                print(e)
+                            await asyncio.sleep(60 * default_minutes)
+                        await asyncio.sleep(60 * default_minutes)
+                    else:
+                        await dms.send(embed=tools.single_embed(f'Your **AFK**session has ended.'))
+                        return
+        except TypeError:
+            return
 
     @commands.command()
     async def show(self, ctx):
