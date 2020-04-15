@@ -57,14 +57,28 @@ class Help(commands.Cog):
         embed.set_footer(text=footer)
         await ctx.send(embed=embed)
 
+    async def help2_embed(self, ctx, args, description, aliases=None):
+        prefix = database.get_prefix(ctx.guild)[0]
+        func = inspect.stack()[1][3]
+        embed = discord.Embed(title=func, color=discord.Color.green(), description=f'```\n{prefix}{func} {args}```')
+        embed.add_field(name=f'> Description', value=description, inline=False)
+        if aliases is not None:
+            if type(aliases) == list:
+                embed.add_field(name='> Aliases', value=', '.join([f'`{a}`' for a in aliases]), inline=False)
+            else:
+                embed.add_field(name='> Aliases', value=f'`{aliases}`', inline=False)
+        embed.set_thumbnail(url=self.client.user.avatar_url)
+        for lst in [misc_cmds, rep_cmds, dms_cmds, fun_cmds, adm_cmds, dev_cmds]:
+            if func in lst:
+                footer = f'Related commands: {", ".join([r for r in lst if r != func])}'
+                embed.set_footer(text=footer)
+        await ctx.send(embed=embed)
+
     @help_page.group()
     async def bug(self, ctx):
-        prefix = database.get_prefix(ctx.guild)[0]
-        func = inspect.stack()[0][3]
-        help_menu = f'`{prefix}{func} message` - Send a bug report to the developer. Add an screenshot of the bug to ' \
-                    f'the command when possible.'
-        footer = f'Related commands: {", ".join([r for r in misc_cmds if r != func])}'
-        await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
+        args = 'message'
+        description = 'Send a bug report to the developer. Add a screenshot of the bug to the command when possible.'
+        await self.help2_embed(ctx, args, description)
 
     @help_page.group(aliases=['kboard'])
     async def karmaboard(self, ctx):
@@ -396,11 +410,10 @@ class Help(commands.Cog):
     @help_page.group(aliases=['purge'])
     @commands.has_permissions(manage_messages=True)
     async def purge_messages(self, ctx):
-        prefix = database.get_prefix(ctx.guild)[0]
-        func = inspect.stack()[0][3]
-        help_menu = f'`{prefix}{func} num` - Delete `num` messages in the current channel.\n__aliases__: `purge`'
-        footer = f'Related commands: {", ".join([r for r in adm_cmds if r != func])}'
-        await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
+        args = 'num'
+        description = f'Delete `num` messages in the current channel.'
+        aliases = 'purge'
+        await self.help2_embed(ctx, args, description, aliases)
 
     @help_page.group(aliases=[])
     @commands.has_permissions(kick_members=True)
