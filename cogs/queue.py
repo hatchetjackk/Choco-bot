@@ -53,7 +53,14 @@ class DMS(commands.Cog):
             "host": ctx.author.id,
             "notification": [notification.id, ctx.channel.id],
             "session": dms.id,
-            "ban list": []
+            "ban list": [],
+            "message id": 0,
+            "dodo code": None,
+            "max entries": 0,
+            "members per group": 0,
+            "welcome": None,
+            "groups": 0,
+            "afk": {'active': False, 'minutes': 0}
         }
         await tools.write_sessions(data)
         await self.wizard(ctx, dms, session_code)
@@ -542,17 +549,6 @@ class DMS(commands.Cog):
                 return (session_code, host, notification, session,
                         ban_list, message_id, dodo_code, max_entries,
                         members_per_group, welcome, groups, afk, minutes)
-        #
-        #
-        # for code, v in data.items():
-        #     if v.get('host') == author.id:
-        #         session_code = code
-        #         if v.get('notification', None) is not None:
-        #             notification = v.get(notification)
-        #         session = v.get('session', None)
-        #
-        #
-        # return None
 
     @commands.command()
     async def kick(self, ctx, member: discord.Member):
@@ -596,21 +592,25 @@ class DMS(commands.Cog):
 
         host = discord.utils.get(ctx.guild.members, id=host)
 
-        # groups = data[session_code]['groups']
+        groups = data[session_code]['groups']
         place = list(groups.keys())[0]
         await dms.send(embed=tools.single_embed(f'Sending Dodo code to **Group {place}**'))
 
         # welcome_message = data[session_code]['welcome']
 
         for user in data[session_code]['groups'][place]:
-            member = self.client.get_user(int(user))
-            msg = f'You have gotten your Session Code for **{host.display_name}\'s** Session!\n' \
-                  f'Please do not forget to leave a review for your host when you finish.\n'\
-                  f'**Dodo Code**: `{data[session_code]["dodo code"]}`\n'
-            if welcome_message is not None:
-                msg += f'\n\n**Your host left you a message!**\n"{welcome_message}"'
-            if member is not None:
-                await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+            try:
+                member = self.client.get_user(int(user))
+                print(member)
+                msg = f'You have gotten your Session Code for **{host.display_name}\'s** Session!\n' \
+                      f'Please do not forget to leave a review for your host when you finish.\n'\
+                      f'**Dodo Code**: `{data[session_code]["dodo code"]}`\n'
+                if welcome_message is not None:
+                    msg += f'\n\n**Your host left you a message!**\n"{welcome_message}"'
+                if member is not None:
+                    await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+            except Exception as e:
+                print(e)
         del data[session_code]['groups'][place]
         await tools.write_sessions(data)
 
