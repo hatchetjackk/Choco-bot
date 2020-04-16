@@ -12,8 +12,6 @@ from discord.ext import commands
 
 
 async def prefix(bot, message):
-    if type(message) == 'NoneType':
-        print(message)
     return database.get_prefix(message.guild)
 
 client = commands.Bot(command_prefix=prefix, case_insensitive=True)
