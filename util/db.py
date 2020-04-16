@@ -71,25 +71,29 @@ def check_database():
 
 
 def in_guilds(guild):
-    if guild is None:
-        return
-    conn, curs = load_database()
-    curs.execute("SELECT 1 FROM guilds WHERE guild_id = (:guild_id)", {'guild_id': guild.id})
     try:
-        out = curs.fetchone()
-        if out[0] == 1:
-            return True
-    except TypeError:
-        return False
+        conn, curs = load_database()
+        curs.execute("SELECT 1 FROM guilds WHERE guild_id = (:guild_id)", {'guild_id': guild.id})
+        try:
+            out = curs.fetchone()
+            if out[0] == 1:
+                return True
+        except TypeError:
+            return False
+    except AttributeError as e:
+        print(e)
 
 
 def add_guild(guild):
-    print(f'Adding {guild.name} to {path}')
-    spam = guild.system_channel.id
-    conn, curs = load_database()
-    with conn:
-        curs.execute("INSERT OR IGNORE INTO guilds VALUES (:guild_id, :prefix, :spam, :administrative, :autorole, :review, :admin, :rep, :karma, :mw)",
-                     {'guild_id': guild.id, 'prefix': 'r:', 'spam': spam, 'administrative': None, 'autorole': None, 'rep': 0, 'karma': 0, 'mw': 0, 'review': 0, 'admin': 1})
+    try:
+        print(f'Adding {guild.name} to {path}')
+        spam = guild.system_channel.id
+        conn, curs = load_database()
+        with conn:
+            curs.execute("INSERT OR IGNORE INTO guilds VALUES (:guild_id, :prefix, :spam, :administrative, :autorole, :review, :admin, :rep, :karma, :mw)",
+                         {'guild_id': guild.id, 'prefix': 'r:', 'spam': spam, 'administrative': None, 'autorole': None, 'rep': 0, 'karma': 0, 'mw': 0, 'review': 0, 'admin': 1})
+    except AttributeError as e:
+        print(e)
 
 
 def mw_set(guild, mode):
@@ -243,6 +247,8 @@ def set_administrative(channel, guild):
 
 
 def get_reviews_given(member):
+    if type(member) is None:
+        return 0
     conn, curs = load_database()
     curs.execute("SELECT reviews_given FROM members WHERE member_id = (:member_id)", {'member_id': member.id})
     reviews_given = curs.fetchone()[0]
@@ -391,8 +397,8 @@ def get_prefix(guild):
     if not in_guilds(guild):
         add_guild(guild)
     conn, curs = load_database()
-    curs.execute("SELECT prefix FROM guilds WHERE guild_id = (:guild_id)", {'guild_id': guild.id})
     try:
+        curs.execute("SELECT prefix FROM guilds WHERE guild_id = (:guild_id)", {'guild_id': guild.id})
         prefix = curs.fetchone()[0]
         prefix_list = (prefix.lower(), prefix.upper())
     except AttributeError:
