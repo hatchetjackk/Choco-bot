@@ -1,3 +1,4 @@
+import inspect
 import sqlite3
 import os
 import time
@@ -81,7 +82,8 @@ def in_guilds(guild):
         except TypeError:
             return False
     except AttributeError as e:
-        print(e)
+        func = inspect.stack()[1][3]
+        print(f'error {e}. stack {func}')
 
 
 def add_guild(guild):
@@ -93,7 +95,8 @@ def add_guild(guild):
             curs.execute("INSERT OR IGNORE INTO guilds VALUES (:guild_id, :prefix, :spam, :administrative, :autorole, :review, :admin, :rep, :karma, :mw)",
                          {'guild_id': guild.id, 'prefix': 'r:', 'spam': spam, 'administrative': None, 'autorole': None, 'rep': 0, 'karma': 0, 'mw': 0, 'review': 0, 'admin': 1})
     except AttributeError as e:
-        print(e)
+        func = inspect.stack()[1][3]
+        print(f'error {e}. stack {func}')
 
 
 def mw_set(guild, mode):
@@ -127,8 +130,9 @@ def karma_cog(guild):
         if curs.fetchone()[0] == 1:
             return True
         return False
-    except AttributeError:
-        print(str(datetime.now()) + ': An error occurred when checking karma cog')
+    except AttributeError as e:
+        func = inspect.stack()[1][3]
+        print(f'error {e}. stack {func}')
         return False
 
 
@@ -401,7 +405,9 @@ def get_prefix(guild):
         curs.execute("SELECT prefix FROM guilds WHERE guild_id = (:guild_id)", {'guild_id': guild.id})
         prefix = curs.fetchone()[0]
         prefix_list = (prefix.lower(), prefix.upper())
-    except AttributeError:
+    except AttributeError as e:
+        func = inspect.stack()[1][3]
+        print(f'error {e}. stack {func}')
         prefix = '!'
         prefix_list = (prefix.lower(), prefix.upper())
     return prefix_list
