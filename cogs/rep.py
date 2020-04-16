@@ -298,9 +298,16 @@ class Rep(commands.Cog):
                                      f'{member.display_name}\'s original score was {pos} pos and {neg} neg.\n'
                                      f'Log: {message}'))
 
-    async def assign_new_role(self, member: discord.Member):
+    @staticmethod
+    async def assign_new_role(member: discord.Member):
         # send new role notifications to general
-        spam = database.get_spam(member.guild)
+        chan = None
+        channels = [c for c in member.guild.channels if 'general']
+        for c in channels:
+            if 'general' in c.name:
+                chan = c
+        if chan is None:
+            chan = database.get_spam(member.guild)
         if not database.in_members_table(member):
             database.add_member(member)
         pos, neg = database.get_rep(member)
@@ -315,7 +322,7 @@ class Rep(commands.Cog):
                 role = discord.utils.get(member.guild.roles, name=rank)
                 if role.name not in [r.name for r in member.roles]:
                     await member.add_roles(role)
-                    await spam.send(embed=tools.single_embed(f':tada: {member.mention} has earned the **{role}** role!'))
+                    await chan.send(embed=tools.single_embed(f':tada: {member.mention} has earned the **{role}** role!'))
 
     @pos.error
     async def on_command_error(self, ctx, error):
