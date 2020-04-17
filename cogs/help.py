@@ -11,7 +11,7 @@ dms_cmds = ['create', 'close', 'end', 'join', 'leave', 'menu', 'send', 'dodo', '
             'ban', 'unban', 'bans']
 fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd']
 adm_cmds = ['settings', 'info', 'prefix', 'spam', 'admin_channel', 'autorole', 'add', 'sub', 'reset', 'warn',
-            'warnings', 'clear_warnings', 'purge_messages']
+            'warnings', 'clear_warnings', 'purge_messages', 'blacklist', 'get_blacklist', 'delete_blacklist']
 misc_cmds = ['bug']
 dev_cmds = ['reboot', 'reload', 'load']
 
@@ -412,6 +412,24 @@ class Help(commands.Cog):
         help_menu = f'`{prefix}{func} @user` - Clear all of a member\'s warnings.\n__aliases__: `cwarn`'
         footer = f'Related commands: {", ".join([r for r in adm_cmds if r != func])}'
         await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
+
+    @help_page.group(aliases=['getbl'])
+    async def get_blacklist(self, ctx):
+        args = ''
+        description = 'See blacklisted items'
+        await self.help2_embed(ctx, args, description, aliases=self.get_blacklist.aliases)
+
+    @help_page.group(aliases=['bl'])
+    async def blacklist(self, ctx):
+        args = 'item1 item2 item3...'
+        description = 'Blacklist items from messages. Messages with blacklisted items will automatically be deleted.'
+        await self.help2_embed(ctx, args, description, aliases=self.blacklist.aliases)
+
+    @help_page.group(aliases=['delbl'])
+    async def delete_blacklist(self, ctx):
+        args = 'item1 item2 item3...'
+        description = 'Remove items from the blacklist.'
+        await self.help2_embed(ctx, args, description, aliases=self.delete_blacklist.aliases)
 
     @help_page.group(aliases=['purge'])
     @commands.has_permissions(manage_messages=True)
