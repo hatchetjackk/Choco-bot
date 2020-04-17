@@ -198,6 +198,8 @@ class Moderator(commands.Cog):
     @commands.command(aliases=['delbl'])
     @commands.has_permissions(administrator=True)
     async def remove_blacklist(self, ctx, *item):
+        if not await self.admin_cog_on(ctx):
+            return
         void = []
         deleted = []
         for b in item:
@@ -214,14 +216,18 @@ class Moderator(commands.Cog):
     @commands.command(aliases=['getbl'])
     @commands.has_permissions(administrator=True)
     async def get_blacklist(self, ctx):
+        if not await self.admin_cog_on(ctx):
+            return
         blacklist = '\n'.join(database.get_blacklist(ctx.guild))
         msg = f'**Blacklist**\n' \
-              f'{blacklist}'
+              f'```\n{blacklist}```'
         await ctx.send(embed=tools.single_embed(msg))
 
     @commands.command(aliases=['bl'])
     @commands.has_permissions(administrator=True)
     async def blacklist(self, ctx, *blacklist):
+        if not await self.admin_cog_on(ctx):
+            return
         exists = []
         added = []
         for b in blacklist:
