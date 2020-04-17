@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 
 import discord
 import util.tools as tools
@@ -38,6 +39,11 @@ class DMS(commands.Cog):
 
     @commands.command()
     async def create(self, ctx):
+        """
+        Create a DMS session and generate the wizard
+        :param ctx:
+        :return:
+        """
         prefix = await self.show_prefix(ctx.guild)
         session_code = await tools.random_code()
         dms = await tools.create_private_channel(ctx, ctx.author, session_code)
@@ -59,7 +65,7 @@ class DMS(commands.Cog):
             "max entries": 0,
             "members per group": 0,
             "welcome": None,
-            "groups": 0,
+            "groups": [],
             "afk": {'active': False, 'minutes': 0},
             "closed": False
         }
@@ -365,7 +371,7 @@ class DMS(commands.Cog):
 
                 # edit sell embed if available
                 try:
-                    msg = f'Session **{session_code}** is now **closed**.'
+                    msg = f'Session **{session_code}** has **ended**.'
                     await tools.edit_msg(
                         self.client.get_channel(_dms_channel),
                         value['message id'],
@@ -379,7 +385,7 @@ class DMS(commands.Cog):
                     for place, member_list in groups.items():
                         for uid in member_list:
                             member = self.client.get_user(uid)
-                            msg = f'Session **{session_code}** was **closed** by the host.'
+                            msg = f'Session **{session_code}** was **ended** by the host.'
                             await member.send(embed=tools.single_embed(msg))
                 except KeyError:
                     pass
@@ -555,7 +561,7 @@ class DMS(commands.Cog):
                                   f'minute(s). \n__Please conduct your business as quickly as possible__.'
                             await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
                     try:
-                        await self.reshow(ctx)
+                        await self.reshow(ctx.author)
                     except Exception as e:
                         print(f'An error occurred when trying to reshow during AFK {e}')
                     await asyncio.sleep(60 * data[session_code]['minutes'])
@@ -638,7 +644,7 @@ class DMS(commands.Cog):
             await tools.write_sessions(data)
             await dms_channel.send(embed=tools.single_embed(f'Member **{member.mention}** kicked from session.'))
             await member.send(embed=tools.single_embed_neg(f'You have been removed from **Session {session_code}**'))
-            await self.reshow(ctx)
+            await self.reshow(ctx.author)
         else:
             await dms_channel.send(embed=tools.single_embed_neg(f'Unable to find and kick **{member}**.'))
 
@@ -689,7 +695,7 @@ class DMS(commands.Cog):
                       f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.'
                 await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
         try:
-            await self.reshow(ctx)
+            await self.reshow(ctx.author)
         except Exception as e:
             print(f'An error occurred when trying to reshow in the send command in channel {ctx.channel}: {e}')
 
@@ -759,7 +765,7 @@ class DMS(commands.Cog):
                 await member.send(embed=tools.single_embed(f'You have been removed from Session **{session_code}**'))
         await tools.write_sessions(data)
         await dms_channel.send(embed=tools.single_embed(f'You have banned **{member.mention}** from your session.'))
-        await self.reshow(ctx)
+        await self.reshow(ctx.author)
 
     @commands.command()
     async def unban(self, ctx, member: discord.Member):
@@ -809,20 +815,20 @@ class DMS(commands.Cog):
     @commands.command()
     async def join(self, ctx, session_code: str):
         """
+        GUEST ACTION
         Join a host's DMS session using the provided session code
         :param ctx:
         :param session_code:
         :return:
         """
-        session_code = session_code.upper()
         prefix = await self.show_prefix(ctx.guild)
-        if await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot **join** a session if you are **Hosting**.'))
-            return
-
+        session_code = session_code.upper()
         data = await tools.read_sessions()
-        dms_channel = await self.get_session_channel(ctx.author)
+        # if await self.is_host(ctx.author):
+        #     await ctx.send(embed=tools.single_embed_neg(f'You cannot **join** a session if you are **Hosting**.'))
+        #     return
 
+        # if session does not exist, notify the guest
         try:
             data[session_code]
         except KeyError:
@@ -832,9 +838,12 @@ class DMS(commands.Cog):
             await ctx.send(embed=tools.single_embed(f'This session is currently closed to new guests.'))
             return
 
-        if ctx.author.id == data[session_code]['host']:
-            await ctx.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-            return
+        host = discord.utils.get(ctx.guild.members, id=data[session_code]['host'])
+        dms_channel = await self.get_session_channel(host)
+
+        # if ctx.author.id == host.id:
+        #     await ctx.send(embed=tools.single_embed(f'You cannot join your own Session.'))
+        #     return
 
         if ctx.author.id in data[session_code]['ban list']:
             msg = f'I\'m sorry. You are unable to join Session **{session_code}**.'
@@ -856,26 +865,52 @@ class DMS(commands.Cog):
                 msg = f'**{ctx.author.display_name}** has joined **Group {place}**.'
                 await dms_channel.send(embed=tools.single_embed(msg))
                 await tools.write_sessions(data)
-                await self.reshow(ctx)
+                await self.reshow(host)
                 return
 
         await ctx.send(f'Sorry, the Session you are trying to join is full.')
 
-    async def reshow(self, ctx, host=None, guild=None):
+    @commands.command()
+    async def leave(self, ctx, session_code):
         """
-        Show current groups and guests. Usually called after a host action.
+        GUEST ACTION
+        Leave a DMS queue with the corresponding session code
         :param ctx:
-        :param host:
-        :param guild:
+        :param session_code:
         :return:
         """
-        if ctx is None:
-            author = host
-        else:
-            author = ctx.author
+        # if await self.is_host(ctx.author):
+        #     await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are hosting a Session.'))
+        #     return
+
         data = await tools.read_sessions()
-        session_code = await self.get_session_code(author)
-        dms_channel = await self.get_session_channel(author)
+        session_code = session_code.upper()
+
+        # get host because this is called by guests
+        host = discord.utils.get(ctx.guild.members, id=data[session_code]['host'])
+        dms_channel = await self.get_session_channel(host)
+
+        groups = data[session_code]['groups']
+        for place, member_list in groups.items():
+            if ctx.author.id in member_list:
+                member_list.remove(ctx.author.id)
+                await ctx.author.send(embed=tools.single_embed(f'You have left **Session {session_code}**.'))
+                await dms_channel.send(embed=tools.single_embed(f'{ctx.author.display_name} has **left** your queue.'))
+                await tools.write_sessions(data)
+                await self.reshow(host)
+                return
+        await ctx.send(embed=tools.single_embed(f'You do not appear to be in a Session.'))
+
+    async def reshow(self, host):
+        """
+        Show current groups and guests. Usually called after a host action but can be triggered by
+        join or leave which requires the host arg
+        :param host: Required because this can be called by guest actions
+        :return:
+        """
+        data = await tools.read_sessions()
+        session_code = await self.get_session_code(host)
+        dms_channel = await self.get_session_channel(host)
 
         groups = data[session_code]['groups']
         per_group = data[session_code]['members per group']
@@ -895,10 +930,7 @@ class DMS(commands.Cog):
                 place = f'Group {place} (0/{per_group})'
             else:
                 for uid in group:
-                    if ctx is None:
-                        member = discord.utils.get(guild.members, id=uid)
-                    else:
-                        member = discord.utils.get(ctx.guild.members, id=uid)
+                    member = discord.utils.get(host.guild.members, id=uid)
                     reviewer_rank = await tools.get_reviewer_rank(db.get_reviews_given(member))
                     members.append(f'{member.display_name} (rank: *{reviewer_rank}*)')
             if group is not None:
@@ -906,30 +938,6 @@ class DMS(commands.Cog):
                 place = f'Group {place} ({len(members)}/{per_group})'
             embed.add_field(name=f'{place}', value=group, inline=False)
         await dms_channel.send(embed=embed)
-
-    @commands.command()
-    async def leave(self, ctx, session_code):
-        """
-        Leave a DMS queue with the corresponding session code
-        :param ctx:
-        :param session_code:
-        :return:
-        """
-        if await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are hosting a Session.'))
-            return
-        data = await tools.read_sessions()
-        dms_channel = await self.get_session_channel(self.client.get_user(data[session_code]['host']))
-        groups = data[session_code]['groups']
-        for place, member_list in groups.items():
-            if ctx.author.id in member_list:
-                member_list.remove(ctx.author.id)
-                await ctx.author.send(embed=tools.single_embed(f'You have left **Session {session_code}**.'))
-                await dms_channel.send(embed=tools.single_embed(f'{ctx.author.display_name} has **left** your queue.'))
-                await tools.write_sessions(data)
-                await self.reshow(ctx=None, host=ctx.author.id)
-                return
-        await ctx.send(embed=tools.single_embed(f'You do not appear to be in a Session.'))
 
     async def promote(self, session_code):
         """
@@ -991,14 +999,14 @@ class DMS(commands.Cog):
                 continue
             # if reaction is to the session's message
             elif value['message id'] == payload.message_id:
-                if await self.is_host(author):
-                    msg = f'You cannot **join** a session if you are **Hosting**.'
-                    await author.send(embed=tools.single_embed_neg(msg))
-                    return
-
-                if author.id == data[session_code]['host']:
-                    await author.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-                    return
+                # if await self.is_host(author):
+                #     msg = f'You cannot **join** a session if you are **Hosting**.'
+                #     await author.send(embed=tools.single_embed_neg(msg))
+                #     return
+                #
+                # if author.id == data[session_code]['host']:
+                #     await author.send(embed=tools.single_embed(f'You cannot join your own Session.'))
+                #     return
 
                 ban_list = data[session_code]['ban list']
                 if author.id in ban_list:
@@ -1007,7 +1015,7 @@ class DMS(commands.Cog):
                     return
 
                 opn = data[session_code]['closed']
-                if not opn:
+                if opn:
                     await author.send(embed=tools.single_embed(f'This session is currently closed to new guests.'))
                     return
 
@@ -1029,8 +1037,8 @@ class DMS(commands.Cog):
                         dms = self.client.get_channel(data[session_code]['session'])
                         await dms.send(embed=tools.single_embed(msg))
                         await tools.write_sessions(data)
-                        host = self.client.get_user(data[session_code]['host'])
-                        await self.reshow(ctx=None, host=host, guild=guild)
+                        host = discord.utils.get(guild.members, id=data[session_code]['host'])
+                        await self.reshow(host)
                         return
 
                 await author.send(f'Sorry, the Session you are trying to join is full.')
@@ -1082,6 +1090,12 @@ class DMS(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload):
         return
+
+    @join.error
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, AttributeError):
+            func = inspect.stack()[1][3]
+            await print(func + ' ' + error)
 
     @kick.error
     async def on_command_error(self, ctx, error):
