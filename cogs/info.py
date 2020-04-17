@@ -7,15 +7,9 @@ class Information(commands.Cog):
     def __init__(self, client):
         self.client = client
 
-    @commands.group(aliases=[])
-    @commands.has_permissions(administrator=True)
-    async def info(self, ctx):
-        if ctx.invoked_subcommand is None:
-            return
-
-    @info.group(aliases=['guild'])
+    @commands.command()
     @commands.cooldown(5, 60, commands.BucketType.user)
-    async def guild_info(self, ctx):
+    async def guild(self, ctx):
         embed = discord.Embed(color=discord.Color.blue())
         embed.add_field(name='Guild Owner', value=ctx.guild.owner)
         embed.add_field(name='Creation Date', value=tools.format_date(ctx.guild.created_at, 1))
@@ -25,9 +19,9 @@ class Information(commands.Cog):
         embed.set_thumbnail(url=ctx.guild.icon_url)
         await ctx.send(embed=embed)
 
-    @info.group(aliases=['member'])
+    @commands.command()
     @commands.cooldown(5, 60, commands.BucketType.user)
-    async def member_info(self, ctx, member: discord.Member):
+    async def who(self, ctx, member: discord.Member):
         joined_guild_human_readable = tools.display_time(tools.to_seconds(member.joined_at), 3)
         joined_discord_human_readable = tools.display_time(tools.to_seconds(member.created_at), 3)
         embed = discord.Embed(title=member.display_name, color=member.colour)
@@ -40,8 +34,7 @@ class Information(commands.Cog):
         embed.set_thumbnail(url=member.avatar_url)
         await ctx.send(embed=embed)
 
-    @member_info.error
-    @guild_info.error
+    @who.error
     async def member_info_error(self, ctx, error):
         if isinstance(error, commands.BadArgument):
             await ctx.send(embed=tools.single_embed('I could not find that member'), delete_after=15)
