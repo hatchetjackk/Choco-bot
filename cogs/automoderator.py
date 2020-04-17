@@ -71,9 +71,8 @@ class Automoderator(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        # search messages for discord links
         if not database.admin_cog(message.guild):
-            return
-        if message.author.guild_permissions.create_instant_invite:
             return
 
         # ignore this guild's invites
@@ -83,17 +82,36 @@ class Automoderator(commands.Cog):
             if w in [f'http://discord.gg/{invite.code}' for invite in await message.guild.invites()]:
                 return
 
+        if message.author.guild_permissions.create_instant_invite:
+            return
+
+        blacklist = database.get_blacklist(message.guild)
+        for b in blacklist:
+            if b in message.content.lower():
+                try:
+                    await message.delete()
+                    msg = f'You have entered a blacklisted link in **{message.guild.name}** ' \
+                          f'Your message has been deleted.'
+                    await message.author.send(embed=tools.single_embed_neg(msg))
+                except Exception as e:
+                    print(e)
+
+        # if link found, delete and warn
         if 'https://discord.gg' in message.content or 'http://discord.gg' in message.content:
-            await message.delete()
+            try:
+                await message.delete()
+            except Exception as e:
+                print(e)
             msg = f'Advertising other Discord servers is not allowed.'
             database.add_warning(message.author, msg)
             fmt = f'You have received an automatic warning for posting a Discord link in ' \
                   f'**{message.guild.name}**.\n> "{msg}"'
             await message.author.send(embed=tools.single_embed_neg(fmt))
 
-            def check(react, user):
-                return message.channel == react.message.channel
+            # def check(react, user):
+            #     return message.channel == react.message.channel
 
+            # if member's warnings are 2 or greater, commence a vote to kick
             warnings, messages = database.get_warnings(message.author)
             fmt = [f'{m[1]} - {m[0]}' for m in messages]
             if warnings >= 2:
@@ -105,13 +123,15 @@ class Automoderator(commands.Cog):
                 msg = await admin_channel.send(embed=embed)
                 await msg.add_reaction('✔')
                 await msg.add_reaction('❌')
-                yes = 0
-                while yes < 2:
-                    reaction, member = await self.client.wait_for('reaction_add', check=check)
-                    if reaction.emoji == '✔':
-                        yes = reaction.count
-                await message.author.kick(reason=f'You have been kicked from {message.guild.name}. The last warning was: "{message}"')
-                await admin_channel.send(embed=tools.single_embed_neg(f'{message.author.display_name} has been kicked.'))
+                # yes = 0
+                # while yes < 2:
+                #     reaction, member = await self.client.wait_for('reaction_add', check=check)
+                #     print(reaction)
+                #     if reaction.emoji == '✔':
+                #         yes = reaction.count
+                #         print(yes)
+                # await message.author.kick(reason=f'You have been kicked from {message.guild.name}. The last warning was: "{message}"')
+                # await admin_channel.send(embed=tools.single_embed_neg(f'{message.author.display_name} has been kicked.'))
 
 
 def setup(client):
