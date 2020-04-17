@@ -824,9 +824,10 @@ class DMS(commands.Cog):
         prefix = await self.show_prefix(ctx.guild)
         session_code = session_code.upper()
         data = await tools.read_sessions()
-        # if await self.is_host(ctx.author):
-        #     await ctx.send(embed=tools.single_embed_neg(f'You cannot **join** a session if you are **Hosting**.'))
-        #     return
+
+        if await self.is_host(ctx.author):
+            await ctx.send(embed=tools.single_embed_neg(f'You cannot **join** a session if you are **Hosting**.'))
+            return
 
         # if session does not exist, notify the guest
         try:
@@ -841,9 +842,9 @@ class DMS(commands.Cog):
         host = discord.utils.get(ctx.guild.members, id=data[session_code]['host'])
         dms_channel = await self.get_session_channel(host)
 
-        # if ctx.author.id == host.id:
-        #     await ctx.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-        #     return
+        if ctx.author.id == host.id:
+            await ctx.send(embed=tools.single_embed(f'You cannot join your own Session.'))
+            return
 
         if ctx.author.id in data[session_code]['ban list']:
             msg = f'I\'m sorry. You are unable to join Session **{session_code}**.'
@@ -879,9 +880,9 @@ class DMS(commands.Cog):
         :param session_code:
         :return:
         """
-        # if await self.is_host(ctx.author):
-        #     await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are hosting a Session.'))
-        #     return
+        if await self.is_host(ctx.author):
+            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are hosting a Session.'))
+            return
 
         data = await tools.read_sessions()
         session_code = session_code.upper()
@@ -999,14 +1000,14 @@ class DMS(commands.Cog):
                 continue
             # if reaction is to the session's message
             elif value['message id'] == payload.message_id:
-                # if await self.is_host(author):
-                #     msg = f'You cannot **join** a session if you are **Hosting**.'
-                #     await author.send(embed=tools.single_embed_neg(msg))
-                #     return
-                #
-                # if author.id == data[session_code]['host']:
-                #     await author.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-                #     return
+                if await self.is_host(author):
+                    msg = f'You cannot **join** a session if you are **Hosting**.'
+                    await author.send(embed=tools.single_embed_neg(msg))
+                    return
+
+                if author.id == data[session_code]['host']:
+                    await author.send(embed=tools.single_embed(f'You cannot join your own Session.'))
+                    return
 
                 ban_list = data[session_code]['ban list']
                 if author.id in ban_list:
