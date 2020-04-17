@@ -166,43 +166,49 @@ class Moderator(commands.Cog):
         await channel.send('test spam')
         # await ctx.send(embed=tools.single_embed(f'{self.client.user.display_name}\'s spam channel is {channel.mention}.'))
 
-    @commands.command(aliases=[])
+    @commands.command()
     @commands.has_permissions(ban_members=True)
-    async def ban_user(self, ctx, member: discord.Member, reason: str = None):
+    async def ban(self, ctx, member: discord.Member, reason: str = None):
         if not await self.admin_cog_on(ctx):
             return
 
         def check(m):
             return m.author == ctx.message.author and m.channel == ctx.channel
 
-        await ctx.send(embed=tools.single_embed(f'Would you like to ban {member.display_name}?'))
+        await ctx.send(embed=tools.single_embed(f'Are you sure you want to ban {member.display_name}?\n'
+                                                f'[yes/no]'))
         msg = await self.client.wait_for('message', check=check)
         if 'yes' in msg.content:
             await ctx.send(embed=tools.single_embed(f'{member.mention}: **See ya, my guy.** :hammer:'))
             await member.ban()
-        if reason is None:
-            reason = 'A reason was not given.'
-        await member.send(f'You have been banned from {ctx.guild.name}.\n'
-                          f'Reason: {reason}')
+            if reason is None:
+                reason = 'A reason was not given.'
+            await member.send(f'You have been banned from {ctx.guild.name}.\n'
+                              f'Reason: {reason}')
+        else:
+            await ctx.send(embed=tools.single_embed(f'Kick aborted.'))
 
-    @commands.command(aliases=[])
+    @commands.command()
     @commands.has_permissions(kick_members=True)
-    async def kick_user(self, ctx, member: discord.Member, reason: str = None):
+    async def kick(self, ctx, member: discord.Member, reason: str = None):
         if not await self.admin_cog_on(ctx):
             return
 
         def check(m):
             return m.author == ctx.message.author and m.channel == ctx.channel
 
-        await ctx.send(embed=tools.single_embed(f'Would you like to kick {member.display_name}?'))
+        await ctx.send(embed=tools.single_embed(f'Are you sure you want to kick {member.display_name}?\n'
+                                                f'[yes/no]'))
         msg = await self.client.wait_for('message', check=check)
         if 'yes' in msg.content:
             await ctx.send(embed=tools.single_embed(f'{member.mention}: **See ya, my guy.** :hiking_boot:'))
             await member.kick()
-        if reason is None:
-            reason = 'A reason was not given.'
-        await member.send(f'You have been kicked from {ctx.guild.name}.\n'
-                          f'Reason: {reason}')
+            if reason is None:
+                reason = 'A reason was not given.'
+            await member.send(f'You have been kicked from {ctx.guild.name}.\n'
+                              f'Reason: {reason}')
+        else:
+            await ctx.send(embed=tools.single_embed(f'Kick aborted.'))
 
     @commands.command(aliases=['delbl'])
     @commands.has_permissions(administrator=True)
