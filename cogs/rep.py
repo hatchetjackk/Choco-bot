@@ -47,7 +47,7 @@ class Rep(commands.Cog):
         if len(ctx.message.attachments) > 0:
             msg += '\n' + ctx.message.attachments[0].url
         await owner.send(msg)
-        await ctx.send(embed=tools.single_embed(f'Your report has been sent. Thank you.'))
+        await ctx.send(embed=tools.single_embed_neg(f'Your report has been sent. Thank you.'))
 
     @commands.command(aliases=['r'])
     @commands.cooldown(2, 30, commands.BucketType.user)
@@ -104,6 +104,46 @@ class Rep(commands.Cog):
         embed = discord.Embed(title=f'{member.display_name}', color=member.color, description=msg)
         embed.set_image(url=mae_banner)
         embed.set_thumbnail(url=member.avatar_url)
+        await ctx.send(embed=embed)
+
+    @commands.command(aliases=['reviewers', 'reviews'])
+    @commands.cooldown(2, 30, commands.BucketType.user)
+    async def top_reviewers(self, ctx):
+        """ return a leaderboard with the top 10 karma leaders. If the requesting member is not in the top 10,
+        their place will be added to the bottom of the leaderboard
+        """
+        if await self.can_bypass_cooldown(ctx):
+            self.repboard.reset_cooldown(ctx)
+        if not await self.rep_cog_on(ctx):
+            return
+        turnip_emoji = self.client.get_emoji(694822764699320411)
+
+        array = {}
+        for member in ctx.guild.members:
+            if member.bot:
+                continue
+            if not database.in_members_table(member):
+                database.add_member(member)
+            reviews_given = database.get_reviews_given(member)
+            array[member.display_name] = reviews_given
+
+        # sort users by most to least rep
+        counter = 1
+        leaderboard = []
+        append_author = ''
+        sorted_rep = OrderedDict(reversed(sorted(array.items(), key=lambda x: x[1])))
+        for member, reviews in sorted_rep.items():
+            reviewer_rank = await tools.get_reviewer_rank(reviews)
+            msg = f'{counter}: **{member}** (*{reviewer_rank}*) - `{reviews}` points '
+            leaderboard.append(msg)
+            if ctx.author.display_name == member and counter > 10:
+                append_author = f'\n----------------\n{counter}: **{member}** (*{reviewer_rank}*) - `{reviews}` points '
+            counter += 1
+
+        embed = discord.Embed(color=discord.Color.blue())
+        embed.add_field(name=f'Top Reviewers :star:', value='\n'.join(leaderboard[:10]) + append_author)
+        embed.set_image(url=mae_banner)
+        # embed.set_thumbnail(url="https://i.imgur.com/wl2MZIV.png")
         await ctx.send(embed=embed)
 
     @commands.command(aliases=['rboard'])
@@ -216,8 +256,15 @@ class Rep(commands.Cog):
         msg = f'**{member.display_name}** gained 1 negative review from '\
               f'**{ctx.author.display_name}**.\n\n'\
               f'**{ctx.author.display_name}** said:\n "{message}"'
+
+        """ Figure out how to attach an image properly """
+        if len(ctx.message.attachments) > 0:
+            msg += '\n' + ctx.message.attachments[0].url
+        embed = discord.Embed(color=discord.Color.red(), description=msg)
+        embed.set_thumbnail(url=member.avatar_url)
+
         # negative reviews need a place to go
-        await staff_support_channel.send(embed=tools.single_embed_neg(msg, avatar=member.avatar_url))
+        await staff_support_channel.send(embed=embed)
         msg = f'Your review has been submitted and forwarded to staff. Thank you.'
         await ctx.send(embed=tools.single_embed_neg(msg), delete_after=30)
 
