@@ -80,10 +80,10 @@ class DMS(commands.Cog):
                     f'`{prefix}show` to show the current queue\n' \
                     f'`{prefix}notify message` send `message` to everyone in your queue\n' \
                     f'`{prefix}welcome message` set a `message` for your guests\n\n' \
-                    f'`{prefix}kick member` to kick `member` from the queue.\n' \
-                    f'`{prefix}bans` show current list of banned members\n' \
-                    f'`{prefix}ban member` ban a `member` and prevent them from joining again \n' \
-                    f'`{prefix}unban member` unban a `member`\n\n' \
+                    f'`{prefix}guest_kick member` to kick `member` from the queue.\n' \
+                    f'`{prefix}guest_bans` show current list of banned members\n' \
+                    f'`{prefix}guest_ban member` ban a `member` and prevent them from joining again \n' \
+                    f'`{prefix}guest_unban member` unban a `member`\n\n' \
                     f'`{prefix}menu` to see these options again'
 
         await dms.send(embed=tools.single_embed(host_menu, avatar=self.client.user.avatar_url))
@@ -316,6 +316,41 @@ class DMS(commands.Cog):
         await tools.edit_msg(self.client.get_channel(_dms_channel), data[session_code]['message id'], msg)
 
     @commands.command()
+    @commands.has_permissions(manage_channels=True)
+    async def admin_end(self, ctx, session_code):
+        """
+        Close a session and prevent guests from joining
+        :param ctx:
+        :param session_code:
+        :return:
+        """
+        data = await tools.read_sessions()
+        try:
+            data[session_code]
+        except KeyError:
+            await ctx.send(embed=tools.single_embed(f'That session does not exist.'))
+            return
+
+        notification = data[session_code]['notification']
+        data[session_code]['closed'] = True
+        await tools.write_sessions(data)
+
+        channel = self.client.get_channel(data[session_code]['session'])
+        await tools.close_private_channel(channel)
+        msg = f'Private Session **ended**.'
+        await tools.edit_msg(self.client.get_channel(notification[1]), notification[0], msg)
+
+        # edit sell embed if available
+        try:
+            msg = f'Session **{session_code}** has **ended**.'
+            await tools.edit_msg(self.client.get_channel(_dms_channel), data[session_code]['message id'], msg)
+        except Exception as e:
+            print(e, ' ending session ' + session_code)
+
+        del data[session_code]
+        await tools.write_sessions(data)
+
+    @commands.command()
     async def close(self, ctx):
         """
         Close a session and prevent guests from joining
@@ -456,10 +491,10 @@ class DMS(commands.Cog):
                     f'`{prefix}show` to show the current queue\n' \
                     f'`{prefix}notify message` send a message to everyone in your queue\n' \
                     f'`{prefix}welcome message` set a message for your guests\n\n' \
-                    f'`{prefix}kick member` to kick `member` from the queue.\n' \
-                    f'`{prefix}bans` show current list of banned members\n' \
-                    f'`{prefix}ban member` ban a `member` and prevent them from joining again \n' \
-                    f'`{prefix}unban member` unban a `member`\n\n' \
+                    f'`{prefix}guest_kick member` to kick `member` from the queue.\n' \
+                    f'`{prefix}guest_bans` show current list of banned members\n' \
+                    f'`{prefix}guest_ban member` ban a `member` and prevent them from joining again \n' \
+                    f'`{prefix}guest_unban member` unban a `member`\n\n' \
                     f'`{prefix}menu` to see these options again\n' \
                     f'`{prefix}afk num` set an AFK timer that sends the next group every `num` minutes.\n'\
                     f'`{prefix}afk stop` stop an AFK timer.'
@@ -624,7 +659,7 @@ class DMS(commands.Cog):
                 return session_code
 
     @commands.command()
-    async def kick(self, ctx, member: discord.Member):
+    async def guest_kick(self, ctx, member: discord.Member):
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
             return
@@ -738,7 +773,7 @@ class DMS(commands.Cog):
         await dms_channel.send(embed=tools.single_embed(f'Your message has been sent.'))
 
     @commands.command()
-    async def ban(self, ctx, member: discord.Member):
+    async def guest_ban(self, ctx, member: discord.Member):
         """
         Remove a guest from the queue and add them to the ban list to prevent them from rejoining.
         :param ctx:
@@ -768,7 +803,7 @@ class DMS(commands.Cog):
         await self.reshow(ctx.author)
 
     @commands.command()
-    async def unban(self, ctx, member: discord.Member):
+    async def guest_unban(self, ctx, member: discord.Member):
         """
         Remove a guest from the ban list
         :param ctx:
@@ -792,7 +827,7 @@ class DMS(commands.Cog):
             await dms_channel.send(embed=tools.single_embed(f'**{member.mention}** is not in the ban list.'))
 
     @commands.command()
-    async def bans(self, ctx):
+    async def guest_bans(self, ctx):
         """
         Show a list of currently banned guests
         :param ctx:
@@ -1098,7 +1133,7 @@ class DMS(commands.Cog):
             func = inspect.stack()[1][3]
             await print(func + ' ' + error)
 
-    @kick.error
+    @guest_kick.error
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.BadArgument):
             await ctx.send(embed=tools.single_embed_neg(f'{error}'))
@@ -1109,7 +1144,7 @@ class DMS(commands.Cog):
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.send(embed=tools.single_embed_neg(f'Please enter a Session code.\n`{prefix}leave code`'))
 
-    @ban.error
+    @guest_ban.error
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.send(embed=tools.single_embed_neg(f'{error}'))
