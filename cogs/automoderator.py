@@ -41,18 +41,21 @@ class Automoderator(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_edit(self, before, after):
-        if not database.admin_cog(after.guild):
-            return
-        if before.guild is None:
-            return
-        spam = database.get_spam(after.guild)
-        if before.author.bot or before.content.startswith('http') or before.content == '':
-            return
-        embed = discord.Embed(description=f'{before.author.display_name} edited a message in {before.channel.mention}')
-        embed.set_thumbnail(url=before.author.avatar_url)
-        embed.add_field(name='Before', value=before.content, inline=False)
-        embed.add_field(name='After', value=after.content, inline=False)
-        await spam.send(embed=embed)
+        try:
+            if not database.admin_cog(after.guild):
+                return
+            if before.guild is None:
+                return
+            spam = database.get_spam(after.guild)
+            if before.author.bot or before.content.startswith('http') or before.content == '':
+                return
+            embed = discord.Embed(description=f'{before.author.display_name} edited a message in {before.channel.mention}')
+            embed.set_thumbnail(url=before.author.avatar_url)
+            embed.add_field(name='Before', value=before.content, inline=False)
+            embed.add_field(name='After', value=after.content, inline=False)
+            await spam.send(embed=embed)
+        except Exception as e:
+            print(e)
 
     @commands.Cog.listener()
     async def on_message_delete(self, message):
@@ -75,6 +78,9 @@ class Automoderator(commands.Cog):
         if not database.admin_cog(message.guild):
             return
 
+        if message.author.bot:
+            return
+
         # ignore this guild's invites
         for w in message.content.split(' '):
             if w in [f'https://discord.gg/{invite.code}' for invite in await message.guild.invites()]:
@@ -82,8 +88,11 @@ class Automoderator(commands.Cog):
             if w in [f'http://discord.gg/{invite.code}' for invite in await message.guild.invites()]:
                 return
 
-        if message.author.guild_permissions.create_instant_invite:
-            return
+        try:
+            if message.author.guild_permissions.create_instant_invite:
+                return
+        except AttributeError:
+            print(f'{message.author.display_name} sent {message}')
 
         blacklist = database.get_blacklist(message.guild)
         for b in blacklist:
