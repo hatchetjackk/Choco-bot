@@ -195,6 +195,46 @@ class Moderator(commands.Cog):
         await member.send(f'You have been kicked from {ctx.guild.name}.\n'
                           f'Reason: {reason}')
 
+    @commands.command(aliases=['delbl'])
+    @commands.has_permissions(administrator=True)
+    async def remove_blacklist(self, ctx, *item):
+        void = []
+        deleted = []
+        for b in item:
+            if database.in_check_blacklist(ctx.guild, b):
+                database.remove_from_blacklist(ctx.guild, b)
+                deleted.append(b)
+            else:
+                void.append(b)
+        if len(deleted) > 0:
+            await ctx.send(embed=tools.single_embed(f'Item(s) removed: {", ".join(deleted)}'))
+        if len(void) > 0:
+            await ctx.send(embed=tools.single_embed_neg(f'{", ".join(void)} not found.'))
+
+    @commands.command(aliases=['getbl'])
+    @commands.has_permissions(administrator=True)
+    async def get_blacklist(self, ctx):
+        blacklist = '\n'.join(database.get_blacklist(ctx.guild))
+        msg = f'**Blacklist**\n' \
+              f'{blacklist}'
+        await ctx.send(embed=tools.single_embed(msg))
+
+    @commands.command(aliases=['bl'])
+    @commands.has_permissions(administrator=True)
+    async def blacklist(self, ctx, *blacklist):
+        exists = []
+        added = []
+        for b in blacklist:
+            if database.in_check_blacklist(ctx.guild, b):
+                exists.append(b)
+            else:
+                database.add_to_blacklist(ctx.guild, b)
+                added.append(b)
+        if len(added) > 0:
+            await ctx.send(embed=tools.single_embed(f'Item(s) blacklisted: {", ".join(added)}'))
+        if len(exists) > 0:
+            await ctx.send(embed=tools.single_embed_neg(f'{", ".join(exists)} already blacklisted.'))
+
     @commands.command(aliases=['mute'])
     @commands.is_owner()
     async def mute_user(self, ctx, member: discord.Member, reason: str = None):
