@@ -39,18 +39,27 @@ class Moderator(commands.Cog):
             autorole = database.get_autorole(ctx.guild)
             administrative = database.get_administrative(ctx.guild)
             review_channel = database.get_review_channel(ctx.guild)
+            # get cog status
             admin = database.admin_cog(ctx.guild)
             rep = database.rep_cog(ctx.guild)
             karma = database.karma_cog(ctx.guild)
             mw = database.mw_cog(ctx.guild)
+            # assign on/off values
+            cogs = [admin, rep, karma, mw]
+            for c in range(len(cogs)):
+                if cogs[c] is True:
+                    cogs[c] = 'On'
+                else:
+                    cogs[c] = 'Off'
 
             embed = discord.Embed(title='Settings', color=discord.Color.blue())
             embed.add_field(name='Prefix', value=f'`{prefix}`')
             embed.add_field(name='Autorole', value=autorole)
-            embed.add_field(name='Spam Channel', value=spam.mention, inline=False)
-            embed.add_field(name='Administrative Channel', value=administrative.mention, inline=False)
-            embed.add_field(name='Review Channel (Rep)', value=review_channel.mention)
-            msg = f'Admin: `{admin}`\nRep: `{rep}`\nKarma: `{karma}`\n~~MW~~: `{mw}`'
+            msg = f'Spam: {spam.mention}\n'\
+                  f'Admin: {administrative.mention}\n'\
+                  f'Review (rep): {review_channel.mention}'
+            embed.add_field(name='Channel Redirects', value=msg, inline=False)
+            msg = f'Admin: `{cogs[0]}`\nRep: `{cogs[1]}`\nKarma: `{cogs[2]}`\n~~MW~~: `{cogs[3]}`'
             embed.add_field(name='Cogs', value=msg, inline=False)
             embed.set_thumbnail(url=ctx.guild.icon_url)
             await ctx.send(embed=embed)
