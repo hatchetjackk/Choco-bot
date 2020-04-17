@@ -77,33 +77,36 @@ class Karma(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        # check message contents for keywords that indicate a user is being thanked
-        if message.author.bot:
-            return
-        if not database.karma_cog(message.guild):
-            return
-        keywords = ['thanks', 'thank', 'cheers']
-        msg = [word.lower() for word in message.content.split(' ') if word != '@everyone']
-
-        # remove punctuation that prevent keywords from being recognized
-        content = [''.join(character for character in word if character not in string.punctuation) for word in msg]
-        mentioned_members = []
-        if any(word in keywords for word in content):
-            if await database.karma_too_soon(message):
+        try:
+            # check message contents for keywords that indicate a user is being thanked
+            if message.author.bot:
                 return
-            for member in message.guild.members:
-                if member.bot or member == message.author:
-                    continue
-                if member.mentioned_in(message):
-                    if not database.in_members_table(member):
-                        database.add_member(member)
-                    database.add_karma(member, 1)
-                    mentioned_members.append(member.display_name)
-                    database.update_karma_timer(message.author)
-        if len(mentioned_members) > 0:
-            embed = discord.Embed(color=discord.Color.blue(),
-                                  description=':tada: {0} earned 1 karma'.format(', '.join(mentioned_members)))
-            await message.channel.send(embed=embed)
+            if not database.karma_cog(message.guild):
+                return
+            keywords = ['thanks', 'thank', 'cheers']
+            msg = [word.lower() for word in message.content.split(' ') if word != '@everyone']
+
+            # remove punctuation that prevent keywords from being recognized
+            content = [''.join(character for character in word if character not in string.punctuation) for word in msg]
+            mentioned_members = []
+            if any(word in keywords for word in content):
+                if await database.karma_too_soon(message):
+                    return
+                for member in message.guild.members:
+                    if member.bot or member == message.author:
+                        continue
+                    if member.mentioned_in(message):
+                        if not database.in_members_table(member):
+                            database.add_member(member)
+                        database.add_karma(member, 1)
+                        mentioned_members.append(member.display_name)
+                        database.update_karma_timer(message.author)
+            if len(mentioned_members) > 0:
+                embed = discord.Embed(color=discord.Color.blue(),
+                                      description=':tada: {0} earned 1 karma'.format(', '.join(mentioned_members)))
+                await message.channel.send(embed=embed)
+        except Exception as e:
+            print(e)
 
 
 def setup(client):
