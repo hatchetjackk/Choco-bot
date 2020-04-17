@@ -35,18 +35,26 @@ class Rep(commands.Cog):
         return False
 
     @commands.command()
-    async def bug(self, ctx, *, message: str = None):
-        prefix = await self.prefix(ctx)
-        if message is None:
-            await ctx.send(embed=tools.single_embed(f'Please use `{prefix}bug message` to send a bug to the developer.\n'
-                                                    f'If possible, please include a screenshot of the issue.'))
-            return
-        owner = self.client.get_user(193416878717140992)
-        msg = f'A bug report was filed by **{ctx.author.display_name}**.\n'\
-              f'**Message**: {message}'
+    async def bug(self, ctx, *, message: str):
+        """
+        Send a bug report
+        :param ctx:
+        :param message:
+        :return:
+        """
+        msg = f'A bug report was filed by **{ctx.author.display_name}**.\n**Message**: {message}'
         if len(ctx.message.attachments) > 0:
             msg += '\n' + ctx.message.attachments[0].url
-        await owner.send(msg)
+        channels = [c for c in ctx.guild.channels if 'bug-reports']
+        chan = None
+        for c in channels:
+            if 'bug-report' in c.name:
+                chan = c
+        if chan is not None:
+            await chan.send(embed=tools.single_embed_neg(msg, avatar=ctx.author.avatar_url))
+        else:
+            owner = self.client.get_user(193416878717140992)
+            await owner.send(msg)
         await ctx.send(embed=tools.single_embed_neg(f'Your report has been sent. Thank you.'))
 
     @commands.command(aliases=['r'])
@@ -413,6 +421,12 @@ class Rep(commands.Cog):
         if isinstance(error, commands.MissingRequiredArgument):
             msg = f'You appear to be missing the `{error.param.name}` argument required for this command. ' \
                   f'Please use `{prefix}add pos/neg @member points message`. Messages are optional.'
+            await ctx.send(embed=tools.single_embed_tooltip(msg))
+
+    @bug.error
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            msg = f'Please enter a message for the bug report.'
             await ctx.send(embed=tools.single_embed_tooltip(msg))
 
     @sub.error
