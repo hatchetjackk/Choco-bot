@@ -131,8 +131,9 @@ def karma_cog(guild):
             return True
         return False
     except AttributeError as e:
-        func = inspect.stack()[1][3]
-        print(f'error {e}. stack {func}')
+        func1 = inspect.stack()[1][3]
+        func2 = inspect.stack()[0][3]
+        print(f'error {e}. stack {func1} -> {func2}')
         return False
 
 
@@ -190,14 +191,6 @@ def in_members_table(member):
             return True
     except TypeError:
         return False
-
-
-def add_to_warnings(member, guild):
-    if not in_warnings_table(member, guild):
-        conn, curs = load_database()
-        with conn:
-            curs.execute("INSERT INTO warnings VALUES (:guild, :member, :message)",
-                         {'guild': guild.id, 'member': member.id, 'message': None})
 
 
 def in_warnings_table(member, guild):
@@ -491,3 +484,52 @@ def add_karma(member, points):
     with conn:
         curs.execute("UPDATE members SET karma = (:karma) WHERE member_id = (:member_id)",
                      {'karma': total_karma, 'member_id': member.id})
+
+
+def in_check_blacklist(guild, item):
+    conn, curs = load_database()
+    curs.execute("SELECT 1 FROM blacklist WHERE guild = (:guild) AND item = (:item)",
+                 {'guild': guild.id, 'item': item})
+    try:
+        if curs.fetchone()[0] == 1:
+            return True
+    except TypeError:
+        return False
+
+
+def add_to_blacklist(guild, blacklist):
+    conn, curs = load_database()
+    if type(blacklist) == list:
+        for b in blacklist:
+            with conn:
+                curs.execute("INSERT OR IGNORE INTO blacklist VALUES (:guild, :item)",
+                             {'guild': guild.id, 'item': b})
+    else:
+        with conn:
+            curs.execute("INSERT OR IGNORE INTO blacklist VALUES (:guild, :item)",
+                         {'guild': guild.id, 'item': blacklist})
+
+
+def remove_from_blacklist(guild, blacklist):
+    conn, curs = load_database()
+    if type(blacklist) == list:
+        for b in blacklist:
+            with conn:
+                curs.execute("DELETE FROM blacklist WHERE guild = (:guild) AND item = (:item)",
+                             {'guild': guild.id, 'item': b})
+    else:
+        with conn:
+            curs.execute("DELETE FROM blacklist WHERE guild = (:guild) AND item = (:item)",
+                         {'guild': guild.id, 'item': blacklist})
+
+
+def get_blacklist(guild):
+    conn, curs = load_database()
+    curs.execute("SELECT item FROM blacklist WHERE guild = (:guild)",
+                 {'guild': guild.id})
+    fetch = curs.fetchall()
+    blacklist = []
+    for b in fetch:
+        blacklist.append(b[0])
+    return blacklist
+
