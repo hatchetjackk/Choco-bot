@@ -6,7 +6,7 @@ import util.db as database
 import util.tools as tools
 from discord.ext import commands
 
-rep_cmds = ['rep', 'pos', 'neg', 'repboard', 'karma', 'karmaboard']
+rep_cmds = ['rep', 'pos', 'neg', 'repboard', 'karma', 'karmaboard', 'top_reviewers']
 dms_cmds = ['create', 'close', 'end', 'join', 'leave', 'menu', 'send', 'dodo', 'show', 'notify', 'welcome', 'kick',
             'ban', 'unban', 'bans']
 fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd']
@@ -136,6 +136,12 @@ class Help(commands.Cog):
         help_menu = f'`{prefix}{func}` - Get the top 10.\n__aliases__: `repboard`'
         footer = f'Related commands: {", ".join([r for r in rep_cmds if r != func])}'
         await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
+
+    @help_page.group(aliases=['reviewers', 'reviews'])
+    async def top_reviewers(self, ctx):
+        args = ''
+        description = 'Get a list of the top reviewers. Not all heroes wear capes.'
+        await self.help2_embed(ctx, args, description, aliases=self.top_reviewers.aliases)
 
     @help_page.group()
     async def create(self, ctx):
