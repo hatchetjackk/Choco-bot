@@ -69,6 +69,50 @@ class Automoderator(commands.Cog):
         embed.set_thumbnail(url=message.author.avatar_url)
         await spam.send(embed=embed)
 
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if not database.admin_cog(message.guild):
+            return
+        if message.author.guild_permissions.create_instant_invite:
+            return
+
+        # ignore this guild's invites
+        for w in message.content.split(' '):
+            if w in [f'https://discord.gg/{invite.code}' for invite in await message.guild.invites()]:
+                return
+            if w in [f'http://discord.gg/{invite.code}' for invite in await message.guild.invites()]:
+                return
+
+        if 'https://discord.gg' in message.content or 'http://discord.gg' in message.content:
+            await message.delete()
+            msg = f'Advertising other Discord servers is not allowed.'
+            database.add_warning(message.author, msg)
+            fmt = f'You have received an automatic warning for posting a Discord link in ' \
+                  f'**{message.guild.name}**.\n> "{msg}"'
+            await message.author.send(embed=tools.single_embed_neg(fmt))
+
+            def check(react, user):
+                return message.channel == react.message.channel
+
+            warnings, messages = database.get_warnings(message.author)
+            fmt = [f'{m[1]} - {m[0]}' for m in messages]
+            if warnings >= 2:
+                admin_channel = database.get_administrative(message.guild)
+                msg = f'**{message.author.display_name}** has reached `{warnings}` warnings. Should they be kicked?\n' \
+                      f'__Past Warnings__\n' + '\n'.join(fmt)
+                embed = discord.Embed(color=discord.Color.red(), description=msg)
+                embed.set_thumbnail(url=message.author.avatar_url)
+                msg = await admin_channel.send(embed=embed)
+                await msg.add_reaction('✔')
+                await msg.add_reaction('❌')
+                yes = 0
+                while yes < 2:
+                    reaction, member = await self.client.wait_for('reaction_add', check=check)
+                    if reaction.emoji == '✔':
+                        yes = reaction.count
+                await message.author.kick(reason=f'You have been kicked from {message.guild.name}. The last warning was: "{message}"')
+                await admin_channel.send(embed=tools.single_embed_neg(f'{message.author.display_name} has been kicked.'))
+
 
 def setup(client):
     client.add_cog(Automoderator(client))
