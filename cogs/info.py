@@ -1,4 +1,5 @@
 import discord
+import util.db as db
 import util.tools as tools
 from discord.ext import commands
 
@@ -33,6 +34,22 @@ class Information(commands.Cog):
         embed.set_footer(text=f'Joined Discord {tools.format_date(member.joined_at)} ({joined_discord_human_readable} ago)')
         embed.set_thumbnail(url=member.avatar_url)
         await ctx.send(embed=embed)
+
+    @commands.command()
+    @commands.cooldown(2, 60*60, commands.BucketType.user)
+    @commands.bot_has_permissions(manage_nicknames=True)
+    async def nick(self, ctx, *nickname):
+        spam = db.get_spam(ctx.guild)
+        msg = f'{ctx.author.display_name} changed their nickname to {" ".join(nickname)}.'
+        await ctx.author.edit(nick=' '.join(nickname))
+        await ctx.send(embed=tools.single_embed(msg))
+        await spam.send(embed=tools.single_embed(msg))
+
+    @nick.error
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, commands.CommandInvokeError):
+            msg = f'**{self.client.user.display_name}** does not have permission to change your nickname.'
+            await ctx.send(embed=tools.single_embed_neg(msg))
 
     @who.error
     async def member_info_error(self, ctx, error):
