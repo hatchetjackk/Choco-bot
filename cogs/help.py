@@ -10,7 +10,7 @@ fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd', 'who', 'guild']
 adm_cmds = ['settings', 'prefix', 'spam', 'admin_channel', 'autorole', 'add', 'sub', 'reset', 'warn',
             'warnings', 'clear_warnings', 'kick', 'ban', 'purge_messages', 'blacklist', 'get_blacklist',
             'delete_blacklist']
-misc_cmds = ['bug']
+misc_cmds = ['bug', 'nick']
 dev_cmds = ['reboot', 'reload', 'load']
 
 
@@ -81,10 +81,19 @@ class Help(commands.Cog):
     """ misc commands """
 
     @help_page.group()
+    async def nick(self, ctx):
+        args = 'nickname'
+        description = f'Change your nickname. This command does not work for roles higher than ' \
+                      f'{self.client.user.display_name}.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
     async def bug(self, ctx):
         args = 'message'
         description = 'Send a bug report to the developer. Add a screenshot of the bug to the command when possible.'
         await self.help2_embed(ctx, args, description)
+
+    """ karma commands """
 
     @help_page.group(aliases=['kboard'])
     async def karmaboard(self, ctx):
@@ -94,8 +103,6 @@ class Help(commands.Cog):
                       'If another member has done something for you please think about giving them ' \
                       'karma.'
         await self.help2_embed(ctx, args, description, aliases=self.karmaboard.aliases)
-
-    """ karma commands """
 
     @help_page.group()
     async def karma(self, ctx):
