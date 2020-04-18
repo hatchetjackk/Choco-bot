@@ -49,11 +49,11 @@ class Information(commands.Cog):
     async def afk(self, ctx, *autoresponse):
         afk, response = db.get_afk(ctx.author)
         if afk == 1:
-            await ctx.send(embed=tools.single_embed('You are no longer AFK.'))
+            await ctx.send(embed=tools.single_embed('You are no longer **AFK**.'))
             db.set_afk(ctx.author, 0, None)
         else:
-            db.set_afk(ctx.author, 1, ' '.join(autoresponse))
-            await ctx.send(embed=tools.single_embed('AFK message set'))
+            db.set_afk(ctx.author, 1, ' '.join(autoresponse).replace("'", "\'"))
+            await ctx.send(embed=tools.single_embed(f'AFK message set to {" ".join(autoresponse)}'))
 
     @commands.Cog.listener()
     async def on_message(self, message):
