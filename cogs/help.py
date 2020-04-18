@@ -10,7 +10,7 @@ fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd', 'who', 'guild']
 adm_cmds = ['settings', 'prefix', 'spam', 'admin_channel', 'autorole', 'add', 'sub', 'reset', 'warn',
             'warnings', 'clear_warnings', 'kick', 'ban', 'purge_messages', 'blacklist', 'get_blacklist',
             'delete_blacklist']
-misc_cmds = ['bug', 'nick']
+misc_cmds = ['bug', 'nick', 'afk']
 dev_cmds = ['reboot', 'reload', 'load']
 
 
@@ -79,6 +79,13 @@ class Help(commands.Cog):
         await ctx.send(embed=embed)
 
     """ misc commands """
+
+    @help_page.group()
+    async def afk(self, ctx):
+        args = 'autoresponse'
+        description = f'Set an autoresponse if you are AFK. Whenever a user pings you, this response will be displayed. ' \
+                      f'Enter the command again to turn off AFK.'
+        await self.help2_embed(ctx, args, description)
 
     @help_page.group()
     async def nick(self, ctx):

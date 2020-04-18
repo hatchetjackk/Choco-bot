@@ -45,6 +45,27 @@ class Information(commands.Cog):
         await ctx.send(embed=tools.single_embed(msg))
         await spam.send(embed=tools.single_embed(msg))
 
+    @commands.command()
+    async def afk(self, ctx, *autoresponse):
+        afk, response = db.get_afk(ctx.author)
+        if afk == 1:
+            await ctx.send(embed=tools.single_embed('You are no longer AFK.'))
+            db.set_afk(ctx.author, 0, None)
+        else:
+            db.set_afk(ctx.author, 1, ' '.join(autoresponse))
+            await ctx.send(embed=tools.single_embed('AFK message set'))
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot:
+            return
+        for member in message.mentions:
+            if db.is_afk(member):
+                afk, response = db.get_afk(member)
+                msg = f'**{member.display_name}** is **AFK**.\n' \
+                      f'> {response}'
+                await message.channel.send(embed=tools.single_embed_neg(msg, avatar=member.avatar_url))
+
     @nick.error
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CommandInvokeError):
