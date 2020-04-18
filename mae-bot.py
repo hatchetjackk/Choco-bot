@@ -68,8 +68,8 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.CheckFailure):
         await ctx.send(embed=tools.single_embed_tooltip(f'I\'m sorry. You do not have permission to run this command.'))
     elif isinstance(error, commands.CommandNotFound):
-        await ctx.send(embed=tools.single_embed_tooltip(f'I\'m sorry. That command doesn\'t exist.'))
-        print(f'{ctx.author.display_name} encountered a {type(error)} error running {ctx.command} in {ctx.channel.name}: {error}')
+        await ctx.send(embed=tools.single_embed_tooltip(f'I\'m sorry. That command doesn\'t exist. Please'
+                                                        f'check {prefix}help for more commands.'))
     elif isinstance(error, commands.CheckFailure):
         await ctx.send(f'You do not have permission to run this command.', delete_after=10)
     elif isinstance(error, discord.errors.NotFound):
