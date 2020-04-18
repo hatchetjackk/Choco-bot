@@ -117,6 +117,17 @@ class Automoderator(commands.Cog):
                   f'**{message.guild.name}**.\n> "{msg}"'
             await message.author.send(embed=tools.single_embed_neg(fmt))
 
+        if 'https://turnip.exchange' in message.content or 'http://turnip.exchange' in message.content:
+            try:
+                await message.delete()
+            except Exception as e:
+                print(e)
+            msg = f'Advertising Turnip Exchange links is not allowed.'
+            database.add_warning(message.author, msg)
+            fmt = f'You have received an automatic warning for posting a Turnip Exchange link in ' \
+                  f'**{message.guild.name}**.\n> "{msg}"'
+            await message.author.send(embed=tools.single_embed_neg(fmt))
+
             # def check(react, user):
             #     return message.channel == react.message.channel
 
