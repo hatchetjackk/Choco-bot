@@ -1,3 +1,5 @@
+import asyncio
+
 import util.db as database
 import util.tools as tools
 import discord
@@ -128,8 +130,8 @@ class Automoderator(commands.Cog):
                   f'**{message.guild.name}**.\n> "{msg}"'
             await message.author.send(embed=tools.single_embed_neg(fmt))
 
-            # def check(react, user):
-            #     return message.channel == react.message.channel
+            def check(react, user):
+                return react.message.id == cache_msg.id
 
             # if member's warnings are 2 or greater, commence a vote to kick
             warnings, messages = database.get_warnings(message.author)
@@ -143,15 +145,18 @@ class Automoderator(commands.Cog):
                 msg = await admin_channel.send(embed=embed)
                 await msg.add_reaction('✔')
                 await msg.add_reaction('❌')
-                # yes = 0
-                # while yes < 2:
-                #     reaction, member = await self.client.wait_for('reaction_add', check=check)
-                #     print(reaction)
-                #     if reaction.emoji == '✔':
-                #         yes = reaction.count
-                #         print(yes)
-                # await message.author.kick(reason=f'You have been kicked from {message.guild.name}. The last warning was: "{message}"')
-                # await admin_channel.send(embed=tools.single_embed_neg(f'{message.author.display_name} has been kicked.'))
+                await asyncio.sleep(1)
+
+                cache_msg = await admin_channel.channel.fetch_message(msg.id)
+                yes = 0
+                while yes < 4:
+                    reaction, member = await self.client.wait_for('reaction_add', check=check)
+                    print(reaction)
+                    if reaction.emoji == '✔':
+                        yes = reaction.count
+                        print(yes)
+                await message.author.kick(reason=f'You have been kicked from {message.guild.name}. The last warning was: "{message}"')
+                await admin_channel.send(embed=tools.single_embed_neg(f'{message.author.display_name} has been kicked.'))
 
 
 def setup(client):
