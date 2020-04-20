@@ -47,18 +47,26 @@ class Information(commands.Cog):
 
     @commands.command()
     async def afk(self, ctx, *autoresponse):
+        if len(autoresponse) < 1:
+            await ctx.send(embed=tools.single_embed('You are no longer **AFK**.'))
+            db.set_afk(ctx.author, 0, None)
+            return
         afk, response = db.get_afk(ctx.author)
         if afk == 1:
             await ctx.send(embed=tools.single_embed('You are no longer **AFK**.'))
             db.set_afk(ctx.author, 0, None)
         else:
             db.set_afk(ctx.author, 1, ' '.join(autoresponse).replace("'", "\'"))
-            await ctx.send(embed=tools.single_embed(f'AFK message set to {" ".join(autoresponse)}'))
+            await ctx.send(embed=tools.single_embed(f'AFK message set to \n> {" ".join(autoresponse)}'))
 
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
             return
+        # if db.is_afk(message.author):
+        #     db.set_afk(message.author, 0)
+        #     await message.channel.send(embed=tools.single_embed(f'**{message.author.display_name}** is no longer **AFK**.'))
+
         for member in message.mentions:
             if db.is_afk(member):
                 afk, response = db.get_afk(member)
