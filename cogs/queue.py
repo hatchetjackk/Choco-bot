@@ -65,8 +65,8 @@ class DMS(commands.Cog):
             "max entries": 0,
             "members per group": 0,
             "welcome": None,
-            "groups": [],
-            "afk": {'active': False, 'minutes': 0},
+            "groups": {},
+            "auto": {'active': False, 'minutes': 0},
             "closed": False
         }
         await tools.write_sessions(data)
@@ -74,17 +74,20 @@ class DMS(commands.Cog):
 
         host_menu = f'**Daisy-Mae Session Commands**\n\n' \
                     f'`{prefix}send` to send out codes to the next group in the queue\n' \
-                    f'`{prefix}close` to close the session off from new guests (sessions is still active)\n' \
+                    f'`{prefix}close` to close the session off to **new** guests\n' \
+                    f'`{prefix}open` to open the session back up to **new** guests\n' \
                     f'`{prefix}end` to end the session.\n' \
                     f'`{prefix}dodo code` change your dodo `code`. ex: `{prefix}dodo ABCDEF`\n' \
                     f'`{prefix}show` to show the current queue\n' \
-                    f'`{prefix}notify message` send `message` to everyone in your queue\n' \
-                    f'`{prefix}welcome message` set a `message` for your guests\n\n' \
+                    f'`{prefix}notify message` send a message to everyone in your queue\n' \
+                    f'`{prefix}welcome message` set a message for your guests\n\n' \
                     f'`{prefix}guest_kick member` to kick `member` from the queue.\n' \
                     f'`{prefix}guest_bans` show current list of banned members\n' \
                     f'`{prefix}guest_ban member` ban a `member` and prevent them from joining again \n' \
                     f'`{prefix}guest_unban member` unban a `member`\n\n' \
-                    f'`{prefix}menu` to see these options again'
+                    f'`{prefix}menu` to see these options again\n' \
+                    f'`{prefix}auto num` set an auto timer that sends the next group every `num` minutes.\n'\
+                    f'`{prefix}auto stop` stop an auto timer.'
 
         await dms.send(embed=tools.single_embed(host_menu, avatar=self.client.user.avatar_url))
 
@@ -265,14 +268,12 @@ class DMS(commands.Cog):
 
         # create groups based on num of users
         groups = {}
-        remainder = max_entries % per_group
-        max_groups = int(max_entries / per_group)
-        if remainder != 0:
-            max_groups += 1
 
-        for i in range(max_groups):
+        for i in range(max_entries):
+            print(i)
             groups[i + 1] = []
 
+        print(groups)
         new_data = {
             "message id": session_message,
             "dodo code": dodo.upper(),
@@ -496,15 +497,15 @@ class DMS(commands.Cog):
                     f'`{prefix}guest_ban member` ban a `member` and prevent them from joining again \n' \
                     f'`{prefix}guest_unban member` unban a `member`\n\n' \
                     f'`{prefix}menu` to see these options again\n' \
-                    f'`{prefix}afk num` set an AFK timer that sends the next group every `num` minutes.\n'\
-                    f'`{prefix}afk stop` stop an AFK timer.'
+                    f'`{prefix}auto num` set an auto timer that sends the next group every `num` minutes.\n'\
+                    f'`{prefix}auto stop` stop an auto timer.'
         dms_channel = await self.get_session_channel(ctx.author)
         await dms_channel.send(embed=tools.single_embed(host_menu, avatar=self.client.user.avatar_url))
 
     @commands.command()
-    async def afk(self, ctx, minutes):
+    async def auto(self, ctx, minutes):
         """
-        Create a looping AFK timer that sends dodo codes every n minutes unless the next group is empty.
+        Create a looping auto timer that sends dodo codes every n minutes unless the next group is empty.
         :param ctx:
         :param minutes: Number of minutes before sending the next code. Use 'stop' to end the timer.
         :return:
@@ -520,9 +521,9 @@ class DMS(commands.Cog):
         # stop the timer and notify guests
         if minutes.lower() == 'stop':
             data = await tools.read_sessions()
-            data[session_code]['afk']['active'] = False
+            data[session_code]['auto']['active'] = False
             await tools.write_sessions(data)
-            await ctx.send(embed=tools.single_embed_neg(f'Your afk session was ended.'))
+            await ctx.send(embed=tools.single_embed_neg(f'Your auto session was ended.'))
 
             members_to_notify = []
             for place, member_list in data[session_code]['groups'].items():
@@ -531,7 +532,7 @@ class DMS(commands.Cog):
 
             for uid in members_to_notify:
                 member = self.client.get_user(uid)
-                msg = f'Your host for session **{session_code}** has turned off their **AFK** timer.'
+                msg = f'Your host for session **{session_code}** has turned off their **auto** timer.'
                 await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
             return
 
@@ -547,61 +548,63 @@ class DMS(commands.Cog):
                 await ctx.send(embed=tools.single_embed_neg(f'Minutes must be an integer.'))
                 return
 
-            msg = f'Your AFK timer is set to {minutes} minutes. Every {minutes} minutes, a group will be sent ' \
-                  f'until you run out of groups or you enter `{prefix}afk stop`.'
+            msg = f'Your auto timer is set to {minutes} minutes. Every {minutes} minutes, a group will be sent ' \
+                  f'until you run out of groups or you enter `{prefix}auto stop`.'
             await ctx.send(embed=tools.single_embed(msg))
 
             data = await tools.read_sessions()
-            data[session_code]['afk']['active'] = True
-            data[session_code]['afk']['minutes'] = minutes
+            data[session_code]['auto']['active'] = True
+            data[session_code]['auto']['minutes'] = minutes
             await tools.write_sessions(data)
 
             while True:
                 data = await tools.read_sessions()
                 welcome = data[session_code]['welcome']
                 dodo_code = data[session_code]['dodo code']
-                afk = data[session_code]['afk']
+                auto = data[session_code]['auto']
                 groups = data[session_code]['groups']
 
                 # recheck the session every loop to determine if the timer has been turned off
-                if afk is False:
+                if auto is False:
                     return
 
-                # send invite to group when afk timer clicks
+                # send invite to group when auto timer clicks
                 if len(groups) >= 1:
                     place = list(groups.keys())[0]
-                    await dms_channel.send(embed=tools.single_embed(f'Sending Dodo code to **Group {place}**'))
+                    if len(groups[place]) > 0:
 
-                    for user in data[session_code]['groups'][place]:
-                        member = self.client.get_user(int(user))
-                        if member is None:
-                            continue
-                        msg = f'You have gotten your Session Code for **{ctx.author.display_name}\'s** Session!\n' \
-                              f'Please do not forget to leave a review for your host when you finish.\n' \
-                              f'**Dodo Code**: `{dodo_code}`\n'
-                        if welcome is not None:
-                            msg += f'\n\n**Your host left you a message!**\n"{welcome}"'
-                        await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-                    del data[session_code]['groups'][place]
-                    await tools.write_sessions(data)
+                        await dms_channel.send(embed=tools.single_embed(f'Sending Dodo code to **Group {place}**'))
 
-                    # notify groups that they have moved up
-                    for place, member_list in data[session_code]['groups'].items():
-                        for uid in member_list:
-                            member = self.client.get_user(uid)
-                            position = list(groups.keys()).index(place) + 1
-                            msg = f'Your group in **Session {session_code}** has moved up! \n' \
-                                  f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.\n' \
-                                  f'**note**: Your host is using an AFK timer. Dodo codes will be sent every {minutes} ' \
-                                  f'minute(s). \n__Please conduct your business as quickly as possible__.'
+                        for user in data[session_code]['groups'][place]:
+                            member = self.client.get_user(int(user))
+                            if member is None:
+                                continue
+                            msg = f'You have gotten your Session Code for **{ctx.author.display_name}\'s** Session!\n' \
+                                  f'Please do not forget to leave a review for your host when you finish.\n' \
+                                  f'**Dodo Code**: `{dodo_code}`\n'
+                            if welcome is not None:
+                                msg += f'\n\n**Your host left you a message!**\n"{welcome}"'
                             await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-                    try:
-                        await self.reshow(ctx.author)
-                    except Exception as e:
-                        print(f'An error occurred when trying to reshow during AFK {e}')
-                    await asyncio.sleep(60 * data[session_code]['minutes'])
+                        del data[session_code]['groups'][place]
+                        await tools.write_sessions(data)
+
+                        # notify groups that they have moved up
+                        for place, member_list in data[session_code]['groups'].items():
+                            for uid in member_list:
+                                member = self.client.get_user(uid)
+                                position = list(groups.keys()).index(place) + 1
+                                msg = f'Your group in **Session {session_code}** has moved up! \n' \
+                                      f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.\n' \
+                                      f'**note**: Your host is using an auto timer. Dodo codes will be sent every {minutes} ' \
+                                      f'minute(s). \n__Please conduct your business as quickly as possible__.'
+                                await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+                        try:
+                            await self.reshow(ctx.author)
+                        except Exception as e:
+                            print(f'An error occurred when trying to reshow during auto {e}')
+                        await asyncio.sleep(60 * data[session_code]['minutes'])
                 else:
-                    await dms_channel.send(embed=tools.single_embed(f'Your AFK session has ended.'))
+                    await dms_channel.send(embed=tools.single_embed(f'Your auto session has ended.'))
                     return
 
     @commands.command()
@@ -892,8 +895,12 @@ class DMS(commands.Cog):
                 msg = f'You have already joined Session **{session_code}**.'
                 await ctx.send(embed=tools.single_embed(msg))
                 return
+
         for place, group in groups.items():
+            print(place, group)
+            print(len(group), data[session_code]['members per group'])
             if len(group) < data[session_code]['members per group']:
+                print('x')
                 group.append(ctx.author.id)
                 msg = f'You have joined **Group {place}** in Session **{session_code}**\n' \
                       f'You can use `{prefix}leave {session_code}` at any time to leave this Session.'
@@ -903,6 +910,9 @@ class DMS(commands.Cog):
                 await tools.write_sessions(data)
                 await self.reshow(host)
                 return
+            else:
+                print('test')
+                continue
 
         await ctx.send(f'Sorry, the Session you are trying to join is full.')
 
@@ -1051,19 +1061,19 @@ class DMS(commands.Cog):
                     return
 
                 opn = data[session_code]['closed']
-                if opn:
+                if opn and payload.user_id != 193416878717140992:
                     await author.send(embed=tools.single_embed(f'This session is currently closed to new guests.'))
                     return
 
                 for place, group in data[session_code]['groups'].items():
-                    if author.id in group:
+                    if author.id in group and payload.user_id != 193416878717140992:
                         msg = f'You have already joined Session **{session_code}**.'
                         await author.send(embed=tools.single_embed(msg))
                         return
 
-                members_per_group = data[session_code]['members per group']
-                for place, group in data[session_code]['groups'].items():
-                    if len(group) < members_per_group:
+                groups = data[session_code]['groups']
+                for place, group in groups.items():
+                    if len(group) < data[session_code]['members per group']:
                         group.append(author.id)
                         prefix = await self.show_prefix(guild)
                         msg = f'You have joined **Group {place}** in Session **{session_code}**\n' \
@@ -1076,6 +1086,8 @@ class DMS(commands.Cog):
                         host = discord.utils.get(guild.members, id=data[session_code]['host'])
                         await self.reshow(host)
                         return
+                    else:
+                        continue
 
                 await author.send(f'Sorry, the Session you are trying to join is full.')
 
