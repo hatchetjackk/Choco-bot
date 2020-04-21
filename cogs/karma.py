@@ -99,9 +99,9 @@ class Karma(commands.Cog):
                         database.add_member(member)
                     database.add_karma(member, 1)
                     database.update_karma_timer(message.author)
-            msg = f':tada: {", ".join([f"**{m.display_name}**" for m in mentioned_members])} earned 1 karma'
-            embed = discord.Embed(color=discord.Color.blue(), description=msg)
-            await message.channel.send(embed=embed)
+                msg = f':tada: {", ".join([f"**{m.display_name}**" for m in mentioned_members])} earned 1 karma'
+                embed = discord.Embed(color=discord.Color.blue(), description=msg)
+                await message.channel.send(embed=embed)
         except Exception as e:
             print('on message karma', e)
 
