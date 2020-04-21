@@ -88,25 +88,22 @@ class Karma(commands.Cog):
 
             # remove punctuation that prevent keywords from being recognized
             content = [''.join(character for character in word if character not in string.punctuation) for word in msg]
-            mentioned_members = []
+            mentioned_members = [member for member in message.guild.members if member.mentioned_in(message) and not member.bot and member != message.author]
+            if len(mentioned_members) < 1:
+                return
             if any(word in keywords for word in content):
                 if await database.karma_too_soon(message):
                     return
-                for member in message.guild.members:
-                    if member.bot or member == message.author:
-                        continue
-                    if member.mentioned_in(message):
-                        if not database.in_members_table(member):
-                            database.add_member(member)
-                        database.add_karma(member, 1)
-                        mentioned_members.append(member.display_name)
-                        database.update_karma_timer(message.author)
-            if len(mentioned_members) > 0:
-                embed = discord.Embed(color=discord.Color.blue(),
-                                      description=':tada: {0} earned 1 karma'.format(', '.join(mentioned_members)))
-                await message.channel.send(embed=embed)
+                for member in mentioned_members:
+                    if not database.in_members_table(member):
+                        database.add_member(member)
+                    database.add_karma(member, 1)
+                    database.update_karma_timer(message.author)
+            msg = f':tada: {", ".join([f"**{m.display_name}**" for m in mentioned_members])} earned 1 karma'
+            embed = discord.Embed(color=discord.Color.blue(), description=msg)
+            await message.channel.send(embed=embed)
         except Exception as e:
-            print(e)
+            print('on message karma', e)
 
 
 def setup(client):
