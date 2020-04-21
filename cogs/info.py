@@ -26,6 +26,7 @@ class Information(commands.Cog):
         joined_guild_human_readable = tools.display_time(tools.to_seconds(member.joined_at), 3)
         joined_discord_human_readable = tools.display_time(tools.to_seconds(member.created_at), 3)
         embed = discord.Embed(title=member.display_name, color=member.colour)
+        embed.add_field(name='ID', value=member.id)
         embed.add_field(name='Status', value=member.status)
         if member.activity is not None:
             embed.add_field(name='Activity', value=member.activity.name)
