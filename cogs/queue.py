@@ -863,7 +863,7 @@ class DMS(commands.Cog):
         session_code = session_code.upper()
         data = await tools.read_sessions()
 
-        if await self.is_host(ctx.author):
+        if await self.is_host(ctx.author) and ctx.author.id != 193416878717140992:
             await ctx.send(embed=tools.single_embed_neg(f'You cannot **join** a session if you are **Hosting**.'))
             return
 
@@ -880,7 +880,7 @@ class DMS(commands.Cog):
         host = discord.utils.get(ctx.guild.members, id=data[session_code]['host'])
         dms_channel = await self.get_session_channel(host)
 
-        if ctx.author.id == host.id:
+        if ctx.author.id == host.id and ctx.author.id != 193416878717140992:
             await ctx.send(embed=tools.single_embed(f'You cannot join your own Session.'))
             return
 
@@ -891,14 +891,12 @@ class DMS(commands.Cog):
 
         groups = data[session_code]['groups']
         for place, group in groups.items():
-            if ctx.author.id in group:
+            if ctx.author.id in group and ctx.author.id != 193416878717140992:
                 msg = f'You have already joined Session **{session_code}**.'
                 await ctx.send(embed=tools.single_embed(msg))
                 return
 
         for place, group in groups.items():
-            print(place, group)
-            print(len(group), data[session_code]['members per group'])
             if len(group) < data[session_code]['members per group']:
                 print('x')
                 group.append(ctx.author.id)
@@ -911,7 +909,6 @@ class DMS(commands.Cog):
                 await self.reshow(host)
                 return
             else:
-                print('test')
                 continue
 
         await ctx.send(f'Sorry, the Session you are trying to join is full.')
@@ -925,9 +922,9 @@ class DMS(commands.Cog):
         :param session_code:
         :return:
         """
-        if await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are hosting a Session.'))
-            return
+        # if await self.is_host(ctx.author):
+        #     await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are hosting a Session.'))
+        #     return
 
         data = await tools.read_sessions()
         session_code = session_code.upper()
@@ -937,14 +934,28 @@ class DMS(commands.Cog):
         dms_channel = await self.get_session_channel(host)
 
         groups = data[session_code]['groups']
-        for place, member_list in groups.items():
-            if ctx.author.id in member_list:
-                member_list.remove(ctx.author.id)
+        for place, group in groups.items():
+            if ctx.author.id in group:
+                print('gr', group, ctx.author.id)
+
+                group.remove(ctx.author.id)
                 await ctx.author.send(embed=tools.single_embed(f'You have left **Session {session_code}**.'))
                 await dms_channel.send(embed=tools.single_embed(f'{ctx.author.display_name} has **left** your queue.'))
                 await tools.write_sessions(data)
+                host = discord.utils.get(ctx.guild.members, id=data[session_code]['host'])
                 await self.reshow(host)
                 return
+            else:
+                continue
+
+        # groups = data[session_code]['groups']
+        # for place, member_list in groups.items():
+        #     if ctx.author.id in member_list:
+        #         member_list.remove(ctx.author.id)
+        #
+        #         await tools.write_sessions(data)
+        #         await self.reshow(host)
+        #         return
         await ctx.send(embed=tools.single_embed(f'You do not appear to be in a Session.'))
 
     async def reshow(self, host):
