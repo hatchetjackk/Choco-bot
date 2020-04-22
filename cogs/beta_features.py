@@ -2,6 +2,9 @@ import asyncio
 import inspect
 import json
 import discord
+# import queue
+import requests
+import aiohttp
 import util.tools as tools
 import util.db as db
 from discord.ext import commands
@@ -15,6 +18,8 @@ _quit = ['q', 'quit']
 
 # where to send invite information
 _dms_channel = 694015832728010762
+
+nook_sessions = {}
 
 
 class BetaFeatures(commands.Cog):
@@ -64,13 +69,30 @@ class BetaFeatures(commands.Cog):
     @commands.has_role(701854792699347065)
     async def beta(self, ctx):
         options = f'Available options:\n' \
-                  f'`bcreate`: start a new session'
+                  f'`bcreate`: start a new session\n' \
+                  f'`ac` predict future Turnip prices (`ac mon_am_price mon_pm_price tues_am_price ...`)'
         await ctx.send(embed=tools.single_embed(options, self.client.user.avatar_url))
 
     async def dms_embed(self, title, description):
         embed = discord.Embed(title=title, description=description, color=discord.Color.green())
         embed.set_thumbnail(url=self.client.user.avatar_url)
         return embed
+
+    @staticmethod
+    async def fetch(session, url):
+        async with session.get(url) as response:
+            return await response.text()
+
+    @commands.command()
+    @commands.has_role(701854792699347065)
+    async def ac(self, ctx, *args):
+        async with aiohttp.ClientSession() as session:
+            url = 'https://api.ac-turnip.com/data/?f='
+            for a in args:
+                url += f'{a}-'
+            f = await self.fetch(session, url)
+            values = json.loads(f)
+            await ctx.send(values['preview'])
 
     @commands.command()
     @commands.has_role(701854792699347065)
@@ -240,8 +262,8 @@ class BetaFeatures(commands.Cog):
         await asyncio.sleep(0)
 
         # sell channel usually timmy sell
-        sell_channel = self.client.get_channel(694015832728010762)
-        # sell_channel = self.client.get_channel(701258725385568307)
+        # sell_channel = self.client.get_channel(694015832728010762)
+        sell_channel = self.client.get_channel(701258725385568307)
         reaction, member = await self.client.wait_for('reaction_add', check=check_react)
         await asyncio.sleep(1)
         while True:
@@ -745,7 +767,6 @@ class BetaFeatures(commands.Cog):
                 except KeyError:
                     pass
 
-        print(session_to_close)
         for code in session_to_close:
             del data[code]
             await tools.write_sessions(data, session_file)
@@ -769,7 +790,6 @@ class BetaFeatures(commands.Cog):
         :param session_file:
         :return:
         """
-        print(session_file)
         data = await tools.read_sessions(session_file)
         for session_code, values in data.items():
             if values['host'] == member.id:
@@ -852,6 +872,9 @@ class BetaFeatures(commands.Cog):
                           f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.'
                     await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
 
+    # async def add_to_queue(self, session_code):
+    #     session = sessions[session_code]
+
     async def show_queue(self, host, session_file):
         """
         Show current groups and guests. Usually called after a host action but can be triggered by
@@ -860,8 +883,7 @@ class BetaFeatures(commands.Cog):
         :param host: a member object
         :return:
         """
-        print(inspect.stack()[1][3])
-        print(type(host))
+        print(inspect.stack()[1][3], inspect.stack()[0][3])
         data = await tools.read_sessions(session_file)
         session_code = await self.get_session_code(host, session_file)
         if session_code is None:
@@ -871,15 +893,11 @@ class BetaFeatures(commands.Cog):
         if data[session_code]['queue_id'] is None:
             pass
         else:
-            print(data[session_code]['queue_id'])
-            print('get cacge')
-            print('priv channel', private_channel)
             queue_id = data[session_code]['queue_id']
             cache_msg = await private_channel.fetch_message(id=queue_id)
-            print(cache_msg)
             await cache_msg.delete()
+
         while True:
-            print(1)
             # grab session data
             data = await tools.read_sessions(session_file)
             session_code = await self.get_session_code(host, session_file)
@@ -890,7 +908,6 @@ class BetaFeatures(commands.Cog):
             groups = data[session_code]['groups']
             per_group = data[session_code]['members_per']
 
-            print(1)
             if len(data[session_code]['groups'].keys()) < 1:
                 msg = f'You are at the end of your groups. Consider starting a new session.'
                 await private_channel.send(embed=tools.single_embed(msg))
@@ -899,7 +916,6 @@ class BetaFeatures(commands.Cog):
             embed = discord.Embed(title=f'Your Queue', color=discord.Color.green())
             embed.set_thumbnail(url=self.client.user.avatar_url)
 
-            print(1)
             for place, group in groups.items():
                 members = []
                 if len(group) == 0:
@@ -923,9 +939,12 @@ class BetaFeatures(commands.Cog):
             # show options
             def check_react(react, user):
                 return react.message.id == queue.id and user.id == host.id
+
             options = '```\nOptions```\n' \
                       '➡ Send Dodo code to the next group\n' \
-                      '⏹ End session'
+                      '⏹ End session\n' \
+                      '🥾 Kick guest'
+            # embed.add_field(name='\u200b', value=options, inline=False)
             embed.add_field(name='\u200b', value=options, inline=False)
             queue = await private_channel.send(embed=embed)
 
@@ -936,15 +955,19 @@ class BetaFeatures(commands.Cog):
             await queue.add_reaction('➡')
             # await queue.add_reaction('🔁')
             await queue.add_reaction('⏹')
+            await queue.add_reaction('🥾')
             reaction, member = await self.client.wait_for('reaction_add', check=check_react)
+
             if reaction.emoji == '➡':
                 await queue.delete()
                 await self.bsend(host, session_file)
+
             if reaction.emoji == '🔁':
                 await private_channel.send('auto on')
+
             if reaction.emoji == '⏹':
-                confirm = await private_channel.send(embed=tools.single_embed('Are you sure you want to end your session?'))
-                await asyncio.sleep(0)
+                msg = 'Are you sure you want to end your session?'
+                confirm = await private_channel.send(embed=tools.single_embed(msg))
                 await confirm.add_reaction('🇾')
                 await confirm.add_reaction('🇳')
                 await asyncio.sleep(0)
@@ -956,6 +979,100 @@ class BetaFeatures(commands.Cog):
                     await self.bend(host, session_file)
                 if reaction.emoji == '🇳':
                     await confirm.delete()
+
+            if reaction.emoji == '🥾':
+                # member = await self.get_member(msg.content)
+                await self.guest_kick(host, session_file)
+                # await self.guest_kick(host, session_file, member)
+
+    async def guest_kick(self, host, session_file):
+        """
+        Kick a guest from a session
+        :param host: member object
+        :param session_file:
+        :param member:
+        :return:
+        """
+
+        # create an embed with paginated members (10) plus  next arrow
+        data = await tools.read_sessions(session_file)
+        session_code = await self.get_session_code(host, session_file)
+        private_channel = await self.get_session_channel(host, session_file)
+        count = 1
+        members = {}
+
+        for place, group in data[session_code]['groups'].items():
+            if len(group) == 0:
+                pass
+            else:
+                for uid in group:
+                    member = discord.utils.get(host.guild.members, id=uid)
+                    if member is None:
+                        continue
+                    else:
+                        members[count] = member
+                        count += 1
+
+        while True:
+            if len(members) > 0:
+                page = 1
+                to_kick = {}
+                for k, v in members.items():
+                    ####
+                    #working here
+                    ####
+                    to_kick[page][k] = v
+                    if len(v) >= 10:
+                        page += 1
+                    to_kick[page][v].append(f'{k}: {v.mention}')
+                reactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '⏩']
+                for k, v in to_kick.items():
+                    embed = discord.Embed(title='Who do you want to kick?', description='\n'.join(v))
+                    prompt = await private_channel.send(embed=embed)
+                    for i in range(0, len(to_kick)):
+                        await prompt.add_reaction(reactions[i])
+
+                    def check_react(react, user):
+                        return react.message.id == prompt.id and user.id == host.id
+
+                    reaction, member = await self.client.wait_for('reaction_add', check=check_react)
+                    kicked_member = None
+                    if reaction.emoji == reactions[0]:
+                        kicked_member = members.get(1)
+                    if reaction.emoji == reactions[1]:
+                        kicked_member = members.get(2)
+                    if reaction.emoji == reactions[2]:
+                        kicked_member = members.get(3)
+                    if reaction.emoji == reactions[3]:
+                        kicked_member = members.get(4)
+                    if reaction.emoji == reactions[4]:
+                        kicked_member = members.get(5)
+                    if reaction.emoji == reactions[5]:
+                        kicked_member = members.get(6)
+                    if reaction.emoji == reactions[6]:
+                        kicked_member = members.get(7)
+                    if reaction.emoji == reactions[7]:
+                        kicked_member = members.get(8)
+                    if reaction.emoji == reactions[8]:
+                        kicked_member = members.get(9)
+                    if reaction.emoji == reactions[9]:
+                        kicked_member = members.get(10)
+                    if reaction.emoji == reactions[10]:
+                        # list next page
+                        pass
+
+                    for place, member_list in data[session_code]['groups'].items():
+                        for uid in member_list:
+                            if self.client.get_user(uid) == kicked_member:
+                                member_list.remove(uid)
+                                await tools.write_sessions(data, session_file)
+                                msg = f'Member **{member.mention}** kicked from session.'
+                                await private_channel.send(embed=tools.single_embed(msg))
+                                msg = f'You have been removed from **Session {session_code}**'
+                                await member.send(embed=tools.single_embed_neg(msg))
+            else:
+                embed = discord.Embed(title='Your queue is empty')
+                await private_channel.send(embed=embed, delete_after=5)
 
     async def promote(self, session_code):
         """
@@ -999,14 +1116,14 @@ class BetaFeatures(commands.Cog):
             data = await tools.read_sessions(session_file)
             for session_code in data:
                 if data[session_code]['message_id'] == reaction.message.id:
-                    if await self.is_host(user, session_file=session_file):
-                        msg = f'You cannot **join** a session if you are **Hosting**.'
-                        await user.send(embed=tools.single_embed_neg(msg))
-                        return
-
-                    if user.id == data[session_code]['host']:
-                        await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-                        return
+                    # if await self.is_host(user, session_file=session_file):
+                    #     msg = f'You cannot **join** a session if you are **Hosting**.'
+                    #     await user.send(embed=tools.single_embed_neg(msg))
+                    #     return
+                    #
+                    # if user.id == data[session_code]['host']:
+                    #     await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
+                    #     return
 
                     ban_list = data[session_code]['ban_list']
                     if user.id in ban_list:
@@ -1015,35 +1132,37 @@ class BetaFeatures(commands.Cog):
                         return
 
                     _open = data[session_code]['open']
-                    if user.id != 193416878717140992:
-                    # if not _open:
+                    if not _open:
                         await user.send(embed=tools.single_embed(f'This session is currently closed to new guests.'))
                         return
 
                     for place, group in data[session_code]['groups'].items():
-                        if user.id in group:
+                        if user.id in group and user.id != 193416878717140992:
                             msg = f'You have already joined Session **{session_code}**.'
                             await user.send(embed=tools.single_embed(msg))
                             return
 
                     members_per_group = data[session_code]['members_per']
                     for place, group in data[session_code]['groups'].items():
-                        if len(group) < members_per_group:
-                            group.append(user.id)
-                            prefix = await self.show_prefix(reaction)
-                            msg = f'You have joined **Group {place}** in Session **{session_code}**\n' \
-                                  f'You can use `{prefix}leave {session_code}` at any time to leave this Session. Be ' \
-                                  f'aware that the Session Code is not the host\'s Dodo code.'
-                            await user.send(embed=tools.single_embed(msg))
-                            msg = f'**{user.mention}** has joined **Group {place}**.'
-                            dms = self.client.get_channel(data[session_code]['private_session'])
-                            await dms.send(embed=tools.single_embed(msg), delete_after=5)
-                            await tools.write_sessions(data, 'sessions/nook.json')
-                            host = discord.utils.get(reaction.message.guild.members, id=data[session_code]['host'])
-                            print('host', host)
-                            await self.show_queue(host=host, session_file='sessions/nook.json')
-                            return
-
+                        try:
+                            if len(group) < members_per_group:
+                                group.append(user.id)
+                                prefix = await self.show_prefix(reaction)
+                                msg = f'You have joined **Group {place}** in Session **{session_code}**\n' \
+                                      f'You can use `{prefix}leave {session_code}` at any time to leave this Session. Be ' \
+                                      f'aware that the Session Code is not the host\'s Dodo code.'
+                                await user.send(embed=tools.single_embed(msg))
+                                msg = f'**{user.mention}** has joined **Group {place}**.'
+                                dms = self.client.get_channel(data[session_code]['private_session'])
+                                await dms.send(embed=tools.single_embed(msg), delete_after=5)
+                                await tools.write_sessions(data, 'sessions/nook.json')
+                                host = discord.utils.get(reaction.message.guild.members, id=data[session_code]['host'])
+                                print('host', host)
+                                await self.show_queue(host=host, session_file='sessions/nook.json')
+                                return
+                        except AttributeError as e:
+                            print('More than one session found in the session file for this user', e)
+                            pass
                     await user.send(embed=tools.single_embed(f'Sorry, the Session you are trying to join is full.'))
 
         # match pig
@@ -1052,20 +1171,20 @@ class BetaFeatures(commands.Cog):
             data = await tools.read_sessions(session_file)
             for session_code in data:
                 if data[session_code]['message_id'] == reaction.message.id:
-                    if await self.is_host(user, session_file):
-                        msg = f'You cannot **join** a session if you are **Hosting**.'
-                        await user.send(embed=tools.single_embed_neg(msg))
-                        return
-
-                    if user.id == data[session_code]['host']:
-                        await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-                        return
-
-                    ban_list = data[session_code]['ban_list']
-                    if user.id in ban_list:
-                        msg = f'I\'m sorry. You are unable to join Session **{session_code}**.'
-                        await user.send(embed=tools.single_embed_neg(msg))
-                        return
+                    # if await self.is_host(user, session_file):
+                    #     msg = f'You cannot **join** a session if you are **Hosting**.'
+                    #     await user.send(embed=tools.single_embed_neg(msg))
+                    #     return
+                    #
+                    # if user.id == data[session_code]['host']:
+                    #     await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
+                    #     return
+                    #
+                    # ban_list = data[session_code]['ban_list']
+                    # if user.id in ban_list:
+                    #     msg = f'I\'m sorry. You are unable to join Session **{session_code}**.'
+                    #     await user.send(embed=tools.single_embed_neg(msg))
+                    #     return
 
                     _open = data[session_code]['open']
                     if not _open:
@@ -1110,7 +1229,6 @@ class BetaFeatures(commands.Cog):
               f'continued development. Thank you so much! You now have access to the Mae-Supporter channel!'
         await member.send(embed=tools.single_embed(msg, self.client.user.avatar_url))
         await ctx.send(embed=tools.single_embed('Message sent!'))
-
 
 
 def setup(client):
