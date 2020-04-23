@@ -89,6 +89,15 @@ class BetaFeatures(commands.Cog):
             nook_sessions.clear()
             print('nook cleared')
 
+    @staticmethod
+    async def in_blacklist(guild, content):
+        blacklist = db.get_blacklist(guild)
+        offending_words = [i for i in content if i in blacklist]
+        if len(offending_words) > 0:
+            return offending_words
+        else:
+            return False
+
     @commands.command()
     @commands.has_any_role('mae-supporters', 'ADMIN', 'Merch Dept.', 'TECHNICIAN')
     async def pfp(self, ctx, member: discord.Member):
@@ -1060,7 +1069,10 @@ class BetaFeatures(commands.Cog):
                 await self.add_group(host, session_type)
 
     async def add_group(self, host, session_type):
-        return
+        session_code = await self.get_session_code(host, session_type)
+        last_place = list(session_type[session_code]['groups'].keys())[-1]
+        last_place += 1
+        session_type[session_code]['groups'][last_place] = []
 
     async def notify_guests(self, host, session_type):
         def check_msg(m):
