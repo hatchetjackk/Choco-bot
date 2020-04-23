@@ -61,6 +61,8 @@ class Automoderator(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_delete(self, message):
+        if message is None:
+            return
         if not database.admin_cog(message.guild):
             return
         spam = database.get_spam(message.guild)
@@ -77,11 +79,18 @@ class Automoderator(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         # search messages for discord links
+        if message is None or message.author.bot:
+            return
+
         if not database.admin_cog(message.guild):
             return
 
-        if message.author.bot:
-            return
+        # ignore links created by moderators
+        try:
+            if message.author.guild_permissions.create_instant_invite:
+                return
+        except AttributeError:
+            print(f'{message.author.display_name} sent {message}')
 
         # ignore this guild's invites
         for w in message.content.split(' '):
@@ -89,12 +98,6 @@ class Automoderator(commands.Cog):
                 return
             if w in [f'http://discord.gg/{invite.code}' for invite in await message.guild.invites()]:
                 return
-
-        try:
-            if message.author.guild_permissions.create_instant_invite:
-                return
-        except AttributeError:
-            print(f'{message.author.display_name} sent {message}')
 
         blacklist = database.get_blacklist(message.guild)
         for b in blacklist:
@@ -147,7 +150,7 @@ class Automoderator(commands.Cog):
                 await msg.add_reaction('❌')
                 await asyncio.sleep(1)
 
-                cache_msg = await admin_channel.channel.fetch_message(msg.id)
+                cache_msg = await admin_channel.fetch_message(msg.id)
                 yes = 0
                 while yes < 4:
                     reaction, member = await self.client.wait_for('reaction_add', check=check)
@@ -155,7 +158,8 @@ class Automoderator(commands.Cog):
                     if reaction.emoji == '✔':
                         yes = reaction.count
                         print(yes)
-                await message.author.kick(reason=f'You have been kicked from {message.guild.name}. The last warning was: "{message}"')
+                msg = f'You have been kicked from {message.guild.name}. The last warning was: "{message}"'
+                await message.author.kick(reason=msg)
                 await admin_channel.send(embed=tools.single_embed_neg(f'{message.author.display_name} has been kicked.'))
 
 
