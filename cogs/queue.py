@@ -44,6 +44,7 @@ class DMS(commands.Cog):
         :param ctx:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         prefix = await self.show_prefix(ctx.guild)
         session_code = await tools.random_code()
         dms = await tools.create_private_channel(ctx, ctx.author, session_code)
@@ -92,6 +93,7 @@ class DMS(commands.Cog):
         await dms.send(embed=tools.single_embed(host_menu, avatar=self.client.user.avatar_url))
 
     async def wizard(self, ctx, dms, session_code):
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         prefix = await self.show_prefix(ctx.guild)
         msg = '**Welcome to the Daisy-Mae Queue Wizard!**\n' \
               'If you\'d like to create a queue, please enter `y` or enter `q` to quit. You can enter `q` at any time to ' \
@@ -296,6 +298,7 @@ class DMS(commands.Cog):
         :param ctx:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         if not await self.is_host(ctx.author):
             msg = f'You cannot run this command if you are not hosting a Session.'
             await ctx.send(embed=tools.single_embed_neg(msg))
@@ -325,6 +328,7 @@ class DMS(commands.Cog):
         :param session_code:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         data = await tools.read_sessions()
         try:
             data[session_code]
@@ -358,6 +362,7 @@ class DMS(commands.Cog):
         :param ctx:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
             return
@@ -384,6 +389,7 @@ class DMS(commands.Cog):
         :param ctx:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
             return
@@ -438,6 +444,7 @@ class DMS(commands.Cog):
         :param dodo:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
             return
@@ -457,6 +464,7 @@ class DMS(commands.Cog):
         :param message:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         prefix = await self.show_prefix(ctx.guild)
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
@@ -478,6 +486,7 @@ class DMS(commands.Cog):
         :param ctx:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         prefix = await self.show_prefix(ctx.guild)
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
@@ -510,102 +519,106 @@ class DMS(commands.Cog):
         :param minutes: Number of minutes before sending the next code. Use 'stop' to end the timer.
         :return:
         """
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
-
-        prefix = await self.show_prefix(ctx.guild)
-        session_code = await self.get_session_code(ctx.author)
-        dms_channel = await self.get_session_channel(ctx.author)
-
-        # stop the timer and notify guests
-        if minutes.lower() == 'stop':
-            data = await tools.read_sessions()
-            data[session_code]['auto']['active'] = False
-            await tools.write_sessions(data)
-            await ctx.send(embed=tools.single_embed_neg(f'Your auto session was ended.'))
-
-            members_to_notify = []
-            for place, member_list in data[session_code]['groups'].items():
-                for uid in member_list:
-                    members_to_notify.append(uid)
-
-            for uid in members_to_notify:
-                member = self.client.get_user(uid)
-                msg = f'Your host for session **{session_code}** has turned off their **auto** timer.'
-                await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-            return
-
-        # set the loop for n minutes and begin loop
-        else:
-            try:
-                minutes = int(minutes)
-                if minutes < 1:
-                    await ctx.send(embed=tools.single_embed_neg(f'Please choose an integer greater than `0`.'))
-                    return
-            except Exception as e:
-                print(e)
-                await ctx.send(embed=tools.single_embed_neg(f'Minutes must be an integer.'))
-                return
-
-            msg = f'Your auto timer is set to {minutes} minutes. Every {minutes} minutes, a group will be sent ' \
-                  f'until you run out of groups or you enter `{prefix}auto stop`.'
-            await ctx.send(embed=tools.single_embed(msg))
-
-            data = await tools.read_sessions()
-            data[session_code]['auto']['active'] = True
-            data[session_code]['auto']['minutes'] = minutes
-            await tools.write_sessions(data)
-
-            while True:
-                data = await tools.read_sessions()
-                welcome = data[session_code]['welcome']
-                dodo_code = data[session_code]['dodo code']
-                auto = data[session_code]['auto']
-                groups = data[session_code]['groups']
-
-                # recheck the session every loop to determine if the timer has been turned off
-                if auto is False:
-                    return
-
-                # send invite to group when auto timer clicks
-                if len(groups) >= 1:
-                    place = list(groups.keys())[0]
-                    if len(groups[place]) > 0:
-
-                        await dms_channel.send(embed=tools.single_embed(f'Sending Dodo code to **Group {place}**'))
-
-                        for user in data[session_code]['groups'][place]:
-                            member = self.client.get_user(int(user))
-                            if member is None:
-                                continue
-                            msg = f'You have gotten your Session Code for **{ctx.author.display_name}\'s** Session!\n' \
-                                  f'Please do not forget to leave a review for your host when you finish.\n' \
-                                  f'**Dodo Code**: `{dodo_code}`\n'
-                            if welcome is not None:
-                                msg += f'\n\n**Your host left you a message!**\n"{welcome}"'
-                            await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-                        del data[session_code]['groups'][place]
-                        await tools.write_sessions(data)
-
-                        # notify groups that they have moved up
-                        for place, member_list in data[session_code]['groups'].items():
-                            for uid in member_list:
-                                member = self.client.get_user(uid)
-                                position = list(groups.keys()).index(place) + 1
-                                msg = f'Your group in **Session {session_code}** has moved up! \n' \
-                                      f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.\n' \
-                                      f'**note**: Your host is using an auto timer. Dodo codes will be sent every {minutes} ' \
-                                      f'minute(s). \n__Please conduct your business as quickly as possible__.'
-                                await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-                        try:
-                            await self.reshow(ctx.author)
-                        except Exception as e:
-                            print(f'An error occurred when trying to reshow during auto {e}')
-                        await asyncio.sleep(60 * data[session_code]['minutes'])
-                else:
-                    await dms_channel.send(embed=tools.single_embed(f'Your auto session has ended.'))
-                    return
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
+        await ctx.send(embed=tools.single_embed_neg(f'Auto has been turned off for now. Please pardon our dust.'))
+        return
+        #
+        # if not await self.is_host(ctx.author):
+        #     await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
+        #     return
+        #
+        # prefix = await self.show_prefix(ctx.guild)
+        # session_code = await self.get_session_code(ctx.author)
+        # dms_channel = await self.get_session_channel(ctx.author)
+        #
+        # # stop the timer and notify guests
+        # if minutes.lower() == 'stop':
+        #     data = await tools.read_sessions()
+        #     data[session_code]['auto']['active'] = False
+        #     await tools.write_sessions(data)
+        #     await ctx.send(embed=tools.single_embed_neg(f'Your auto session was ended.'))
+        #
+        #     members_to_notify = []
+        #     for place, member_list in data[session_code]['groups'].items():
+        #         for uid in member_list:
+        #             members_to_notify.append(uid)
+        #
+        #     for uid in members_to_notify:
+        #         member = self.client.get_user(uid)
+        #         msg = f'Your host for session **{session_code}** has turned off their **auto** timer.'
+        #         await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+        #     return
+        #
+        # # set the loop for n minutes and begin loop
+        # else:
+        #     try:
+        #         minutes = int(minutes)
+        #         if minutes < 1:
+        #             await ctx.send(embed=tools.single_embed_neg(f'Please choose an integer greater than `0`.'))
+        #             return
+        #     except Exception as e:
+        #         print(e)
+        #         await ctx.send(embed=tools.single_embed_neg(f'Minutes must be an integer.'))
+        #         return
+        #
+        #     msg = f'Your auto timer is set to {minutes} minutes. Every {minutes} minutes, a group will be sent ' \
+        #           f'until you run out of groups or you enter `{prefix}auto stop`.'
+        #     await ctx.send(embed=tools.single_embed(msg))
+        #
+        #     data = await tools.read_sessions()
+        #     data[session_code]['auto']['active'] = True
+        #     data[session_code]['auto']['minutes'] = minutes
+        #     await tools.write_sessions(data)
+        #
+        #     while True:
+        #         data = await tools.read_sessions()
+        #         welcome = data[session_code]['welcome']
+        #         dodo_code = data[session_code]['dodo code']
+        #         auto = data[session_code]['auto']
+        #         groups = data[session_code]['groups']
+        #
+        #         # recheck the session every loop to determine if the timer has been turned off
+        #         if auto is False:
+        #             return
+        #
+        #         # send invite to group when auto timer clicks
+        #         if len(groups) >= 1:
+        #             place = list(groups.keys())[0]
+        #             if len(groups[place]) > 0:
+        #
+        #                 await dms_channel.send(embed=tools.single_embed(f'Sending Dodo code to **Group {place}**'))
+        #
+        #                 for user in data[session_code]['groups'][place]:
+        #                     member = self.client.get_user(int(user))
+        #                     if member is None:
+        #                         continue
+        #                     msg = f'You have gotten your Session Code for **{ctx.author.display_name}\'s** Session!\n' \
+        #                           f'Please do not forget to leave a review for your host when you finish.\n' \
+        #                           f'**Dodo Code**: `{dodo_code}`\n'
+        #                     if welcome is not None:
+        #                         msg += f'\n\n**Your host left you a message!**\n"{welcome}"'
+        #                     await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+        #                 del data[session_code]['groups'][place]
+        #                 await tools.write_sessions(data)
+        #
+        #                 # notify groups that they have moved up
+        #                 for place, member_list in data[session_code]['groups'].items():
+        #                     for uid in member_list:
+        #                         member = self.client.get_user(uid)
+        #                         position = list(groups.keys()).index(place) + 1
+        #                         msg = f'Your group in **Session {session_code}** has moved up! \n' \
+        #                               f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.\n' \
+        #                               f'**note**: Your host is using an auto timer. Dodo codes will be sent every {minutes} ' \
+        #                               f'minute(s). \n__Please conduct your business as quickly as possible__.'
+        #                         await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+        #                 try:
+        #                     await self.reshow(ctx.author)
+        #                 except Exception as e:
+        #                     print(f'An error occurred when trying to reshow during auto {e}')
+        #                 await asyncio.sleep(60 * data[session_code]['auto']['minutes'])
+        #         else:
+        #             await dms_channel.send(embed=tools.single_embed(f'Your auto session has ended.'))
+        #             return
 
     @commands.command()
     async def show(self, ctx):
@@ -614,6 +627,7 @@ class DMS(commands.Cog):
         :param ctx:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
             return
@@ -663,6 +677,7 @@ class DMS(commands.Cog):
 
     @commands.command()
     async def guest_kick(self, ctx, member: discord.Member):
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
             return
@@ -693,6 +708,7 @@ class DMS(commands.Cog):
         :param ctx:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
             return
@@ -746,6 +762,7 @@ class DMS(commands.Cog):
         :param message:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
             return
@@ -770,6 +787,8 @@ class DMS(commands.Cog):
 
         for uid in members_to_notify:
             member = self.client.get_user(uid)
+            if member is None:
+                continue
             msg = f'You\'ve received a message from your Session host **{ctx.author.display_name}**:\n' \
                   f'"{message}"'
             await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
@@ -783,6 +802,7 @@ class DMS(commands.Cog):
         :param member:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
             return
@@ -813,6 +833,7 @@ class DMS(commands.Cog):
         :param member:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
             return
@@ -836,6 +857,7 @@ class DMS(commands.Cog):
         :param ctx:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         if not await self.is_host(ctx.author):
             await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
             return
@@ -859,6 +881,7 @@ class DMS(commands.Cog):
         :param session_code:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         prefix = await self.show_prefix(ctx.guild)
         session_code = session_code.upper()
         data = await tools.read_sessions()
@@ -926,6 +949,7 @@ class DMS(commands.Cog):
         #     await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are hosting a Session.'))
         #     return
 
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         data = await tools.read_sessions()
         session_code = session_code.upper()
 
@@ -938,7 +962,7 @@ class DMS(commands.Cog):
             if ctx.author.id in group:
                 print('gr', group, ctx.author.id)
 
-                group.remove(ctx.author.id)
+                data[session_code]['groups'][place].remove(ctx.author.id)
                 await ctx.author.send(embed=tools.single_embed(f'You have left **Session {session_code}**.'))
                 await dms_channel.send(embed=tools.single_embed(f'{ctx.author.display_name} has **left** your queue.'))
                 await tools.write_sessions(data)
@@ -965,6 +989,7 @@ class DMS(commands.Cog):
         :param host: Required because this can be called by guest actions
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         data = await tools.read_sessions()
         session_code = await self.get_session_code(host)
         dms_channel = await self.get_session_channel(host)
@@ -988,8 +1013,13 @@ class DMS(commands.Cog):
             else:
                 for uid in group:
                     member = discord.utils.get(host.guild.members, id=uid)
-                    reviewer_rank = await tools.get_reviewer_rank(db.get_reviews_given(member))
-                    members.append(f'{member.display_name} (rank: *{reviewer_rank}*)')
+                    if member is None:
+                        data[session_code]['groups'][place].remove(uid)
+                        continue
+                    else:
+                        reviewer_rank = await tools.get_reviewer_rank(db.get_reviews_given(member))
+                        members.append(f'{member.display_name} (rank: *{reviewer_rank}*)')
+                        # members.append(f'{member.display_name}')
             if group is not None:
                 group = '\n'.join(members)
                 place = f'Group {place} ({len(members)}/{per_group})'
@@ -1002,6 +1032,7 @@ class DMS(commands.Cog):
         :param session_code:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         data = await tools.read_sessions()
         groups = data[session_code]['groups']
         members_per_group = data[session_code]['members per group']
@@ -1034,6 +1065,7 @@ class DMS(commands.Cog):
         :param payload:
         :return:
         """
+        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         # if payload isn't turnip
         if payload.emoji.id != _turnip_emoji:
             return
