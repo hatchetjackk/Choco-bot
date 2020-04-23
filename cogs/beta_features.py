@@ -72,6 +72,7 @@ class BetaFeatures(commands.Cog):
     async def beta(self, ctx):
         options = f'Available options:\n' \
                   f'`bcreate`: start a new session\n' \
+                  f'`bleave`: see what queues you are in and pick a reaction to leave \n' \
                   f'`ac` predict future Turnip prices (`ac mon_am_price mon_pm_price tues_am_price ...)`\n' \
                   f'`pfp @member` see a member\'s profile picture in all it\'s glory'
         await ctx.send(embed=tools.single_embed(options, self.client.user.avatar_url))
@@ -958,7 +959,13 @@ class BetaFeatures(commands.Cog):
                 return
 
             dodo_code = session_type[session_code]['dodo_code']
-            embed = discord.Embed(title=f'Your Queue', color=discord.Color.green(), description=f'Dodo Code: {dodo_code}')
+            status = session_type[session_code]['open']
+            if status is True:
+                status = 'Open'
+            else:
+                status = 'Closed'
+            description = f'Status: {status}\n Dodo Code: {dodo_code}'
+            embed = discord.Embed(title=f'Your Queue', color=discord.Color.green(), description=description)
             # embed.set_thumbnail(url=self.client.user.avatar_url)
 
             for place, group in groups.items():
@@ -973,8 +980,10 @@ class BetaFeatures(commands.Cog):
                             session_type[session_code]['groups'][place].remove(uid)
                             continue
                         else:
-                            reviewer_rank = await tools.get_reviewer_rank(db.get_reviews_given(member))
-                            members.append(f'{member.mention} (rank: *{reviewer_rank}*)')
+                            members.append(f'{member.mention}')
+                            # reviewer_rank = await tools.get_reviewer_rank(db.get_reviews_given(member))
+                            # members.append(f'{member.mention} (rank: *{reviewer_rank}*)')
+
                 if group is not None:
                     group = '\n'.join(members)
                     place = f'Group {place} ({len(members)}/{per_group})'
@@ -991,9 +1000,11 @@ class BetaFeatures(commands.Cog):
             dodo = '🔁 Change Dodo'
             notify = '💬 Notify Guests'
             addgroup = '➕ Add a group'
+            close_open = '⏯ Close/Open your queue'
             options1 = f'```\n' \
                        f'{send}\n' \
                        f'{end}\n' \
+                       f'{close_open}\n' \
                        f'{dodo}\n' \
                        f'```'
             options2 = f'```\n' \
@@ -1017,12 +1028,14 @@ class BetaFeatures(commands.Cog):
 
             try:
                 await queue.add_reaction('➡')
-                await queue.add_reaction('🔁')
                 await queue.add_reaction('⏹')
+                await queue.add_reaction('⏯')
+                await queue.add_reaction('🔁')
                 await queue.add_reaction('🥾')
                 await queue.add_reaction('🚫')
                 await queue.add_reaction('💬')
                 await queue.add_reaction('➕')
+
             except Exception as e:
                 print(e)
                 pass
@@ -1052,6 +1065,10 @@ class BetaFeatures(commands.Cog):
                 if reaction.emoji == '🇳':
                     await confirm.delete()
 
+            if reaction.emoji == '⏯':
+                await queue.delete()
+                await self.pause(host, session_type)
+
             if reaction.emoji == '🥾':
                 await queue.delete()
                 await self.guest_kick(host, session_type)
@@ -1067,6 +1084,14 @@ class BetaFeatures(commands.Cog):
             if reaction.emoji == '➕':
                 await queue.delete()
                 await self.add_group(host, session_type)
+
+    async def pause(self, host, session_type):
+        session_code = await self.get_session_code(host, session_type)
+        status = session_type[session_code]['open']
+        if status is True:
+            session_type[session_code]['open'] = False
+        else:
+            session_type[session_code]['open'] = True
 
     async def add_group(self, host, session_type):
         session_code = await self.get_session_code(host, session_type)
@@ -1319,7 +1344,6 @@ class BetaFeatures(commands.Cog):
                 await tools.write_sessions(data)
 
     async def is_host(self, member, session_file=None):
-        print(member, session_file)
         session_code = await self.get_session_code(member, session_file)
         if session_code is not None:
             return True
@@ -1331,18 +1355,16 @@ class BetaFeatures(commands.Cog):
 
         # match raccoon
         if reaction.emoji == reactions[0]:
-            # session_file = 'sessions/nook.json'
-            # data = await tools.read_sessions(session_file)
             for session_code in nook_sessions:
                 if nook_sessions[session_code]['message_id'] == reaction.message.id:
-                    # if await self.is_host(user, session_type=nook_sessions):
-                    #     msg = f'You cannot **join** a session if you are **Hosting**.'
-                    #     await user.send(embed=tools.single_embed_neg(msg))
-                    #     return
-                    #
-                    # if user.id == data[session_code]['host']:
-                    #     await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-                    #     return
+                    if await self.is_host(user, nook_sessions):
+                        msg = f'You cannot **join** a session if you are **Hosting**.'
+                        await user.send(embed=tools.single_embed_neg(msg))
+                        return
+
+                    if user.id == nook_sessions[session_code]['host']:
+                        await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
+                        return
 
                     ban_list = nook_sessions[session_code]['ban_list']
                     if user.id in ban_list:
@@ -1389,15 +1411,15 @@ class BetaFeatures(commands.Cog):
         elif reaction.emoji == reactions[1]:
             for session_code in daisy_sessions:
                 if daisy_sessions[session_code]['message_id'] == reaction.message.id:
-                    # if await self.is_host(user, session_file):
-                    #     msg = f'You cannot **join** a session if you are **Hosting**.'
-                    #     await user.send(embed=tools.single_embed_neg(msg))
-                    #     return
-                    #
-                    # if user.id == data[session_code]['host']:
-                    #     await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-                    #     return
-                    #
+                    if await self.is_host(user, daisy_sessions):
+                        msg = f'You cannot **join** a session if you are **Hosting**.'
+                        await user.send(embed=tools.single_embed_neg(msg))
+                        return
+
+                    if user.id == daisy_sessions[session_code]['host']:
+                        await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
+                        return
+
                     ban_list = daisy_sessions[session_code]['ban_list']
                     if user.id in ban_list:
                         msg = f'I\'m sorry. You are unable to join Session **{session_code}**.'
@@ -1443,15 +1465,15 @@ class BetaFeatures(commands.Cog):
         elif reaction.emoji == reactions[2]:
             for session_code in other_sessions:
                 if other_sessions[session_code]['message_id'] == reaction.message.id:
-                    # if await self.is_host(user, session_file):
-                    #     msg = f'You cannot **join** a session if you are **Hosting**.'
-                    #     await user.send(embed=tools.single_embed_neg(msg))
-                    #     return
-                    #
-                    # if user.id == data[session_code]['host']:
-                    #     await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-                    #     return
-                    #
+                    if await self.is_host(user, other_sessions) and user.id != 193416878717140992:
+                        msg = f'You cannot **join** a session if you are **Hosting**.'
+                        await user.send(embed=tools.single_embed_neg(msg))
+                        return
+
+                    if user.id == other_sessions[session_code]['host'] and user.id != 193416878717140992:
+                        await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
+                        return
+
                     ban_list = other_sessions[session_code]['ban_list']
                     if user.id in ban_list:
                         msg = f'I\'m sorry. You are unable to join Session **{session_code}**.'
