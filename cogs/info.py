@@ -42,7 +42,7 @@ class Information(commands.Cog):
     async def nick(self, ctx, *nickname):
         spam = db.get_spam(ctx.guild)
         msg = f'{ctx.author.display_name} changed their nickname to {" ".join(nickname)}.'
-        await ctx.author.edit(nick=' '.join(nickname))
+        await ctx.author.edit(nick=' '.join([w.replace("'", "\'") for w in nickname]))
         await ctx.send(embed=tools.single_embed(msg))
         await spam.send(embed=tools.single_embed(msg))
 
