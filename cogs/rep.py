@@ -130,8 +130,8 @@ class Rep(commands.Cog):
         for member in ctx.guild.members:
             if member.bot:
                 continue
-            if not database.in_members_table(member):
-                database.add_member(member)
+            # if not database.in_members_table(member):
+            #     database.add_member(member)
             reviews_given = database.get_reviews_given(member)
             array[member.display_name] = reviews_given
 
@@ -167,13 +167,13 @@ class Rep(commands.Cog):
         turnip_emoji = self.client.get_emoji(694822764699320411)
 
         array = {}
-        for member_obj in ctx.guild.members:
-            if member_obj.bot:
-                continue
-            if not database.in_members_table(member_obj):
-                database.add_member(member_obj)
-            pos, neg = database.get_rep(member_obj)
-            array[member_obj.display_name] = pos
+        top_ten = database.top_ten_rep(ctx.guild)
+        for (uid, pos, neg) in top_ten:
+            member = discord.utils.get(ctx.guild.members, id=uid)
+            if member is None:
+                pass
+            else:
+                array[member.display_name] = pos
 
         # sort users by most to least rep
         counter = 1
@@ -187,9 +187,10 @@ class Rep(commands.Cog):
                 if counter == k:
                     msg = msg + v
             leaderboard.append(msg)
-            if ctx.author.display_name == member and counter > 10:
-                append_author = f'\n----------------\n{counter}: **{member}** - `{rep}` points'
             counter += 1
+        if ctx.author.display_name not in array:
+            pos, neg, index = database.get_rep_position(ctx.author)
+            append_author = f'\n----------------\n{index}: **{ctx.author.display_name}** - `{pos}` points'
 
         embed = discord.Embed(color=discord.Color.blue())
         embed.add_field(name=f'Rep Leaderboard {turnip_emoji}', value='\n'.join(leaderboard[:10]) + append_author)

@@ -47,13 +47,13 @@ class Karma(commands.Cog):
         if not await self.karma_cog_on(ctx):
             return
         array = {}
-        for member_obj in ctx.guild.members:
-            if member_obj.bot:
-                continue
-            if not database.in_members_table(member_obj):
-                database.add_member(member_obj)
-            karma = database.get_karma(member_obj)
-            array[member_obj.display_name] = karma
+        top_ten = database.top_ten_karma(ctx.guild)
+        for (uid, karma) in top_ten:
+            member = discord.utils.get(ctx.guild.members, id=uid)
+            if member is None:
+                pass
+            else:
+                array[member.display_name] = karma
 
         counter = 1
         leaderboard = []
@@ -66,9 +66,9 @@ class Karma(commands.Cog):
                 if counter == k:
                     msg = msg + v
             leaderboard.append(msg)
-            if ctx.author.display_name == member and counter > 10:
-                append_author = f'\n----------------\n{counter}: **{member}** - `{karma}` points'
-            counter += 1
+        if ctx.author.display_name not in array:
+            karma, index = database.get_karma_position(ctx.author)
+            append_author = f'\n----------------\n{index}: **{ctx.author.display_name}** - `{karma}` points'
 
         embed = discord.Embed(color=discord.Color.blue())
         embed.add_field(name='Karma Leaderboard',
