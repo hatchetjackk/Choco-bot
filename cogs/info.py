@@ -1,7 +1,10 @@
 import discord
+import json
+import time
 import util.db as db
 import util.tools as tools
 from discord.ext import commands
+from datetime import datetime
 
 
 class Information(commands.Cog):
@@ -19,6 +22,25 @@ class Information(commands.Cog):
         embed.add_field(name='Number of Members', value=str(ctx.guild.member_count))
         embed.set_thumbnail(url=ctx.guild.icon_url)
         await ctx.send(embed=embed)
+        print(ctx.guild.created_at)
+
+    @commands.group()
+    async def incident(self, ctx):
+        if ctx.invoked_subcommand is None:
+            with open('files/incident.json') as f:
+                i = json.load(f)
+            last_incident = tools.display_time(int(time.time() - i))
+            await ctx.send(embed=tools.single_embed(f'Time since last incident: `{last_incident}`'))
+
+    @incident.group()
+    @commands.has_permissions(administrator=True)
+    async def reset(self, ctx):
+        with open('files/incident.json') as f:
+            i = json.load(f)
+        i = tools.display_time(int(time.time() - i))
+        with open('files/incident.json', 'w') as f:
+            json.dump(time.time(), f, indent=4)
+        await ctx.send(embed=tools.single_embed(f'Incident date recorded. Last incident was `{i}` ago.'))
 
     @commands.command()
     @commands.cooldown(5, 60, commands.BucketType.user)
@@ -37,7 +59,19 @@ class Information(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command()
-    @commands.cooldown(2, 60*60, commands.BucketType.user)
+    @commands.has_permissions(administrator=True)
+    async def role(self, ctx, role: discord.Role):
+        members_with_role = []
+        for m in ctx.guild.members:
+            if role in m.roles:
+                members_with_role.append(m)
+        description = '\n'.join([m.display_name for m in members_with_role])
+        embed = discord.Embed(title=f'Users with the role {role}', description=description, color=discord.Color.green())
+        embed.set_thumbnail(url=self.client.user.avatar_url)
+        await ctx.send(embed=embed)
+
+    @commands.command()
+    @commands.cooldown(2, 60, commands.BucketType.user)
     @commands.bot_has_permissions(manage_nicknames=True)
     async def nick(self, ctx, *nickname):
         spam = db.get_spam(ctx.guild)
@@ -48,32 +82,34 @@ class Information(commands.Cog):
 
     @commands.command()
     async def afk(self, ctx, *autoresponse):
-        if len(autoresponse) < 1:
+        if len(autoresponse) == 0:
             await ctx.send(embed=tools.single_embed('You are no longer **AFK**.'))
             db.set_afk(ctx.author, 0, None)
             return
-        afk, response = db.get_afk(ctx.author)
-        if afk == 1:
-            await ctx.send(embed=tools.single_embed('You are no longer **AFK**.'))
-            db.set_afk(ctx.author, 0, None)
         else:
             db.set_afk(ctx.author, 1, ' '.join(autoresponse).replace("'", "\'"))
             await ctx.send(embed=tools.single_embed(f'AFK message set to \n> {" ".join(autoresponse)}'))
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        # if message.author.id == 505019512702238730:
+        #     await message.add_reaction('🇸')
+        #     await message.add_reaction('🇮')
+        #     await message.add_reaction('🇲')
+        #     await message.add_reaction('🇵')
+
+        if 'cube' in message.content:
+            await message.add_reaction('🧊')
+
         if message.author.bot:
             return
-        # if db.is_afk(message.author):
-        #     db.set_afk(message.author, 0)
-        #     await message.channel.send(embed=tools.single_embed(f'**{message.author.display_name}** is no longer **AFK**.'))
 
         for member in message.mentions:
             if db.is_afk(member):
                 afk, response = db.get_afk(member)
                 msg = f'**{member.display_name}** is **AFK**.\n' \
                       f'> {response}'
-                await message.channel.send(embed=tools.single_embed_neg(msg, avatar=member.avatar_url))
+                await message.author.send(embed=tools.single_embed_neg(msg, avatar=member.avatar_url))
 
     @nick.error
     async def on_command_error(self, ctx, error):
