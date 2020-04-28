@@ -79,11 +79,15 @@ class Karma(commands.Cog):
     async def on_message(self, message):
         try:
             # check message contents for keywords that indicate a user is being thanked
+            if len(message.content) < 1:
+                return
             if message.author.bot:
+                return
+            if message.guild is None:
                 return
             if not database.karma_cog(message.guild):
                 return
-            keywords = ['thanks', 'thank', 'cheers']
+            keywords = ['thanks', 'thank', 'cheers', 'ty']
             msg = [word.lower() for word in message.content.split(' ') if word != '@everyone']
 
             # remove punctuation that prevent keywords from being recognized
