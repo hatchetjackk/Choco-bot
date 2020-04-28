@@ -372,7 +372,6 @@ class Rep(commands.Cog):
         for rank, reviews in ranks.items():
             if pos >= reviews:
                 if rank not in [role.name for role in member.guild.roles]:
-                    print(2)
                     await member.guild.create_role(name=rank, hoist=True)
                 role = discord.utils.get(member.guild.roles, name=rank)
                 if role.name not in [r.name for r in member.roles]:
@@ -406,8 +405,6 @@ class Rep(commands.Cog):
                   f'where `@member` can be a user mention, user ID, or the username in quotes. '\
                   f'**Messages are required.**'
             await ctx.send(embed=tools.single_embed_tooltip(msg))
-            msg = f'{ctx.author.display_name} encountered a {type(error)} error running {ctx.command} in {ctx.channel.name}: {error}'
-            print(msg)
 
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.channel.purge(limit=1)
