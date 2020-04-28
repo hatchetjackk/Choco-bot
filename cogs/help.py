@@ -6,10 +6,10 @@ from discord.ext import commands
 rep_cmds = ['rep', 'pos', 'neg', 'repboard', 'karma', 'karmaboard', 'top_reviewers']
 dms_cmds = ['create', 'close', 'opn', 'end', 'join', 'leave', 'menu', 'send', 'dodo', 'show', 'notify', 'welcome',
             'guest_kick', 'guest_ban', 'guest_unban', 'guest_bans', 'admin_end']
-fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd', 'who', 'guild']
+fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd', 'who', 'guild', 'pfp']
 adm_cmds = ['settings', 'prefix', 'spam', 'admin_channel', 'autorole', 'add', 'sub', 'reset', 'warn',
-            'warnings', 'clear_warnings', 'kick', 'ban', 'purge_messages', 'blacklist', 'get_blacklist',
-            'delete_blacklist']
+            'warnings', 'clear_warnings', 'kick', 'ban', 'purge', 'blacklist', 'get_blacklist',
+            'delete_blacklist', 'role']
 misc_cmds = ['bug', 'nick', 'afk']
 dev_cmds = ['reboot', 'reload', 'load']
 
@@ -21,17 +21,36 @@ class Help(commands.Cog):
     @commands.group(aliases=['help'])
     async def help_page(self, ctx):
         def list_cmds(cmds):
-            if len(cmds) > 8:
-                a = cmds[:8]
-                b = cmds[9:]
+            if 7 < len(cmds) < 10:
+                a = cmds[:7]
+                b = cmds[7:]
                 lst = []
+                if len(b) < len(a):
+                    r = len(a) - len(b)
+                    for i in range(r):
+                        b.append('')
                 for x, y in zip(a, b):
-                    spaces = 27 - (len(x))
-                    lst.append(f'{x}{" " * spaces}{y}')
+                    spaces_x = 15 - (len(x))
+                    lst.append(f'{x}{" " * spaces_x}{y}')
+                lst = '\n' + '\n'.join(lst)
+            elif len(cmds) > 10:
+                a = cmds[:6]
+                b = cmds[6:12]
+                c = cmds[12:]
+                lst = []
+                if len(c) < len(b):
+                    r = len(b) - len(c)
+                    for i in range(r):
+                        c.append('')
+                for x, y, z in zip(a, b, c):
+                    spaces_x = 15 - (len(x))
+                    spaces_y = 15 - (len(y))
+                    lst.append(f'{x}{" " * spaces_x}{y}{" " * spaces_y}{z}')
                 lst = '\n' + '\n'.join(lst)
             else:
                 lst = '\n' + '\n'.join([i for i in cmds])
             return f'```{lst}```'
+
         if ctx.invoked_subcommand is None:
             prefix = database.get_prefix(ctx.guild)[0]
             msg = f'> Info\nType `{prefix}help [command]` to get more information about a command'
@@ -295,6 +314,12 @@ class Help(commands.Cog):
         await self.help2_embed(ctx, args, description)
 
     @help_page.group()
+    async def pfp(self, ctx):
+        args = '@user'
+        description = f'Is a user\'s profile picture too small? Use this to see all the details!'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
     async def yt(self, ctx):
         args = 'query'
         description = f'Search for a YouTube video. Returns the first result.'
@@ -338,6 +363,12 @@ class Help(commands.Cog):
                     f'`{prefix}{func} mw on/off` - Turn the `mw` cog on/off.\n'
         footer = f'Related commands: {", ".join([r for r in adm_cmds if r != func])}'
         await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
+
+    @help_page.group()
+    async def role(self, ctx):
+        args = 'role'
+        description = 'See who has the specified role. No need to @ it.'
+        await self.help2_embed(ctx, args, description)
 
     @help_page.group()
     async def ban(self, ctx):
@@ -440,12 +471,12 @@ class Help(commands.Cog):
         description = 'Remove items from the blacklist.'
         await self.help2_embed(ctx, args, description, aliases=self.delete_blacklist.aliases)
 
-    @help_page.group(aliases=['purge'])
+    @help_page.group()
     @commands.has_permissions(manage_messages=True)
-    async def purge_messages(self, ctx):
+    async def purge(self, ctx):
         args = 'num'
         description = f'Delete `num` messages in the current channel.'
-        await self.help2_embed(ctx, args, description, self.purge_messages.aliases)
+        await self.help2_embed(ctx, args, description, self.purge.aliases)
 
     @help_page.group()
     @commands.has_permissions(kick_members=True)
