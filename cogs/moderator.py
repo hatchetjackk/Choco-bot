@@ -2,6 +2,7 @@ import asyncio
 import sys
 import os
 import discord
+import random
 import util.db as database
 import util.tools as tools
 from discord.ext import commands
@@ -166,19 +167,38 @@ class Moderator(commands.Cog):
         await channel.send('test spam')
         # await ctx.send(embed=tools.single_embed(f'{self.client.user.display_name}\'s spam channel is {channel.mention}.'))
 
+    async def yes_no_buttons(self, prompt, user):
+        await prompt.add_reaction('🇾')
+        await prompt.add_reaction('🇳')
+        await asyncio.sleep(0)
+
+        def check_react(react, actor):
+            return react.message.id == prompt.id and actor.id == user.id
+
+        try:
+            reaction, member = await self.client.wait_for('reaction_add', check=check_react, timeout=20)
+            if reaction.emoji == '🇾':
+                await prompt.clear_reactions()
+                return 'yes'
+            if reaction.emoji == '🇳':
+                await prompt.clear_reactions()
+                return 'no'
+        except asyncio.TimeoutError:
+            await prompt.edit(embed=tools.single_embed('Request timed out.'), delete_after=10)
+            await prompt.clear_reactions()
+
     @commands.command()
     @commands.has_permissions(ban_members=True)
-    async def ban(self, ctx, member: discord.Member, reason: str = None):
+    async def ban(self, ctx, member: discord.Member, *, reason: str = None):
         if not await self.admin_cog_on(ctx):
             return
 
-        def check(m):
-            return m.author == ctx.message.author and m.channel == ctx.channel
-
-        await ctx.send(embed=tools.single_embed(f'Are you sure you want to ban {member.display_name}?\n'
-                                                f'[yes/no]'))
-        msg = await self.client.wait_for('message', check=check)
-        if 'yes' in msg.content:
+        msg = f'Are you sure you want to ban {member.display_name}?'
+        if reason is not None:
+            msg += f'\nReason: {reason}'
+        prompt = await ctx.send(embed=tools.single_embed(msg))
+        answer = await self.yes_no_buttons(prompt, ctx.author)
+        if answer == 'yes':
             await ctx.send(embed=tools.single_embed(f'{member.mention}: **See ya, my guy.** :hammer:'))
             await member.ban()
             if reason is None:
@@ -186,7 +206,7 @@ class Moderator(commands.Cog):
             await member.send(f'You have been banned from {ctx.guild.name}.\n'
                               f'Reason: {reason}')
         else:
-            await ctx.send(embed=tools.single_embed(f'Kick aborted.'))
+            await ctx.send(embed=tools.single_embed(f'Ban cancelled.'))
 
     @commands.command()
     @commands.has_permissions(kick_members=True)
