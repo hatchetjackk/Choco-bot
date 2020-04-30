@@ -106,7 +106,6 @@ class BetaFeatures(commands.Cog):
         """
         # if ctx.author.id != 193416878717140992:
         #     await ctx.send(embed=tools.single_embed(f'Sorry, the beta is closed at the moment.'))
-        # session_code = await tools.random_code()
         private_session = await self.create_private_channel(ctx, ctx.author)
         if not private_session:
             msg = 'You already have an active Session Channel.'
@@ -368,6 +367,7 @@ class BetaFeatures(commands.Cog):
             "max_groups": max_groups,
             "members_per": per_group,
             "groups": groups,
+            "history": [],
             "open": True
         }
 
@@ -587,6 +587,7 @@ class BetaFeatures(commands.Cog):
             "members_per": per_group,
             "welcome": None,
             "groups": groups,
+            "history": [],
             "open": True
         }
 
@@ -765,6 +766,7 @@ class BetaFeatures(commands.Cog):
             "members_per": per_group,
             "welcome": None,
             "groups": groups,
+            "history": [],
             "open": True
         }
 
@@ -829,11 +831,9 @@ class BetaFeatures(commands.Cog):
 
     async def get_session_channel(self, member):
         """
-
         :param member:
         :return:
         """
-        print(inspect.stack()[0][3])
         for session_code, v in self.sessions.items():
             if int(session_code) == member.id:
                 return self.client.get_channel(int(v['private_session']))
@@ -843,8 +843,6 @@ class BetaFeatures(commands.Cog):
         :param member:  member object
         :return:
         """
-        print(inspect.stack()[0][3])
-
         for session_code, values in self.sessions.items():
             if int(session_code) == member.id:
                 return session_code
@@ -940,6 +938,7 @@ class BetaFeatures(commands.Cog):
         private_channel = await self.get_session_channel(host)
 
         groups = self.sessions[session_code]['groups']
+        history = self.sessions[session_code]['history']
         place = list(groups.keys())[0]
         msg = await private_channel.send(embed=tools.single_embed(f'Sending Dodo code to **Group {place}**'), delete_after=5)
         await private_channel.fetch_message(msg.id)
@@ -958,6 +957,9 @@ class BetaFeatures(commands.Cog):
                     await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
                 except Exception as e:
                     print(f'an error occurred when sending a dodo code: {e}')
+            for uid in self.sessions[session_code]['groups'][place]:
+                history.append(uid)
+            # history.append(self.sessions[session_code]['groups'][place])
             del self.sessions[session_code]['groups'][place]
 
             # notify groups that they have moved up
@@ -974,6 +976,41 @@ class BetaFeatures(commands.Cog):
                         msg += f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.'
                     await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
 
+    async def show_history(self, host):
+        session_code = await self.get_session_code(host)
+        if session_code is None:
+            return
+        private_channel = await self.get_session_channel(host)
+        guild = private_channel.guild
+        history = self.sessions[session_code]['history']
+        if len(history) < 1:
+            description = 'Your history is empty'
+        else:
+            members = [discord.utils.get(guild.members, id=int(uid)) for uid in history]
+            description = ', '.join([m.mention for m in members if m is not None])
+        embed = discord.Embed(title='Queue History', description=description, color=discord.Color.green())
+        embed.set_footer(text='History menu timeout is 60 seconds.')
+        prompt = await private_channel.send(embed=embed)
+        await prompt.add_reaction('❎')
+
+        def check_react(react, actor):
+            return react.message.id == prompt.id and actor.id == host.id
+
+        try:
+            reaction, member = await self.client.wait_for('reaction_add', check=check_react, timeout=60)
+            if reaction.emoji == '❎':
+                await prompt.clear_reactions()
+                await prompt.delete()
+
+        except asyncio.TimeoutError:
+            try:
+                await prompt.edit(embed=tools.single_embed('History timed out.'), delete_after=10)
+                await prompt.clear_reactions()
+            except discord.NotFound:
+                pass
+        except discord.NotFound:
+            pass
+
     async def show_queue(self, host, remove_reaction=None):
         """
         Show current groups and guests. Usually called after a host action but can be triggered by
@@ -987,7 +1024,6 @@ class BetaFeatures(commands.Cog):
         if session_code is None:
             return
         private_channel = await self.get_session_channel(host)
-        print(private_channel)
 
         groups = self.sessions[session_code]['groups']
         per_group = self.sessions[session_code]['members_per']
@@ -1030,6 +1066,7 @@ class BetaFeatures(commands.Cog):
         end = '⏹ End session'
         kick = '🥾 Kick guest'
         ban = '🚫 Ban guest'
+        history = '📜 History'
         dodo = '🔁 Change Dodo'
         notify = '💬 Notify Guests'
         addgroup = '➕ Add a group'
@@ -1043,7 +1080,7 @@ class BetaFeatures(commands.Cog):
         options2 = f'```\n' \
                    f'{kick}\n' \
                    f'{ban}\n' \
-                   f'\n' \
+                   f'{history}' \
                    f'```'
         options3 = f'```\n' \
                    f'{notify}\n' \
@@ -1058,11 +1095,9 @@ class BetaFeatures(commands.Cog):
         # edit queue in place if not exists
         queue_id = self.sessions[session_code]['queue_id']
         if queue_id is None:
-            print(2)
             queue = await private_channel.send(embed=embed)
             self.sessions[session_code]['queue_id'] = queue.id
         else:
-            print(type(queue_id), queue_id)
             queue = await private_channel.fetch_message(id=queue_id)
             await queue.edit(embed=embed)
             if remove_reaction is not None:
@@ -1073,7 +1108,7 @@ class BetaFeatures(commands.Cog):
         self.sessions[session_code]['queue_id'] = queue.id
 
         reactions = [
-            '➡', '⏹', '⏯', '🔁', '🥾', '🚫',
+            '➡', '⏹', '⏯', '🔁', '🥾', '🚫', '📜',
             # '🔠',
             '💬', '➕'
         ]
@@ -1367,7 +1402,7 @@ class BetaFeatures(commands.Cog):
         emoji = payload.emoji.name
         message = payload.message_id
 
-        reactions = ['➡', '⏹', '⏯', '🔁', '🥾', '🚫', '💬', '➕']
+        reactions = ['➡', '⏹', '⏯', '🔁', '🥾', '🚫', '💬', '➕', '📜']
         if emoji in reactions:
             try:
                 # await self.get_session_code(user)
@@ -1419,6 +1454,10 @@ class BetaFeatures(commands.Cog):
                     await self.add_group(user)
                     await self.show_queue(user, emoji)
 
+                if emoji == reactions[8]:
+                    await self.show_history(user)
+                    await self.show_queue(user, emoji)
+
             except KeyError as e:
                 print('no session found', e)
             except discord.Forbidden as e:
@@ -1464,7 +1503,8 @@ class BetaFeatures(commands.Cog):
                                 prefix = await self.show_prefix(guild)
                                 msg = f'You have joined a BETA session\n' \
                                       f'**Group {place}** Session **{session_code}**\n' \
-                                      f'~~You can use `{prefix}bleave {session_code}` (lol) at any time to leave this Session.~~\n\n' \
+                                      f'You can use `{prefix}bleave` (in any channel) to view and leave any sessions ' \
+                                      f'you have joined.' \
                                       f'You will receive the Host\'s Dodo Code when your group is called.'
                                 await user.send(embed=tools.single_embed(msg))
                                 msg = f'**{user.mention}** has joined **Group {place}**.'
