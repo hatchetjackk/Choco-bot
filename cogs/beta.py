@@ -104,8 +104,8 @@ class BetaFeatures(commands.Cog):
         :param ctx:
         :return:
         """
-        if ctx.author.id != 193416878717140992:
-            await ctx.send(embed=tools.single_embed(f'Sorry, the beta is closed at the moment.'))
+        # if ctx.author.id != 193416878717140992:
+        #     await ctx.send(embed=tools.single_embed(f'Sorry, the beta is closed at the moment.'))
         # session_code = await tools.random_code()
         private_session = await self.create_private_channel(ctx, ctx.author)
         if not private_session:
@@ -918,7 +918,8 @@ class BetaFeatures(commands.Cog):
                                 msg = f'You have left Session {session_code}.'
                                 await ctx.send(embed=tools.single_embed(msg), delete_after=5)
                                 msg = f'**{ctx.author.mention}** has left your queue.'
-                                host = self.client.get_user(int(session_code))
+                                # host = self.client.get_user(int(session_code))
+                                host = discord.utils.get(ctx.guild.members, id=int(session_code))
                                 private_channel = await self.get_session_channel(host)
                                 await private_channel.send(embed=tools.single_embed_neg(msg), delete_after=5)
                                 await prompt.delete()
@@ -926,6 +927,8 @@ class BetaFeatures(commands.Cog):
                                 await self.write_session()
                                 return
                 await prompt.delete()
+
+            # move everyone up in the queue
 
     async def bsend(self, host):
         """
@@ -1424,8 +1427,6 @@ class BetaFeatures(commands.Cog):
         # check join reactions
         guild = self.client.get_guild(payload.guild_id)
         reactions = ['🦝', '🐷', '⭐']
-
-        # match raccoon
         if emoji in reactions:
             for session_code in self.sessions:
                 if self.sessions[session_code]['message_id'] == message:
@@ -1476,116 +1477,6 @@ class BetaFeatures(commands.Cog):
                             print('More than one session found in the session file for this user', e)
                             return
                     await user.send(embed=tools.single_embed(f'Sorry, the Session you are trying to join is full.'))
-
-        # # match pig
-        # elif emoji == reactions[1]:
-        #     for session_code in self.sessions:
-        #         if self.sessions[session_code]['message_id'] == message:
-        #             if await self.is_host(user) and user.id != 193416878717140992:
-        #                 msg = f'You cannot **join** a session if you are **Hosting**.'
-        #                 await user.send(embed=tools.single_embed_neg(msg))
-        #                 return
-        #
-        #             if user.id == self.sessions[session_code]['host'] and user.id != 193416878717140992:
-        #                 await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-        #                 return
-        #
-        #             ban_list = self.sessions[session_code]['ban_list']
-        #             if user.id in ban_list:
-        #                 msg = f'I\'m sorry. You are unable to join Session **{session_code}**.'
-        #                 await user.send(embed=tools.single_embed_neg(msg))
-        #                 return
-        #
-        #             _open = self.sessions[session_code]['open']
-        #             if not _open:
-        #                 await user.send(embed=tools.single_embed(f'This session is currently closed to new guests.'))
-        #                 return
-        #
-        #             for place, group in self.sessions[session_code]['groups'].items():
-        #                 if user.id in group and user.id != 193416878717140992:
-        #                     msg = f'You have already joined Session **{session_code}**.'
-        #                     await user.send(embed=tools.single_embed(msg))
-        #                     return
-        #
-        #             members_per_group = self.sessions[session_code]['members_per']
-        #             for place, group in self.sessions[session_code]['groups'].items():
-        #                 try:
-        #                     if len(group) < members_per_group:
-        #                         group.append(user.id)
-        #                         prefix = await self.show_prefix(guild)
-        #                         msg = f'You have joined a BETA session\n' \
-        #                               f'**Group {place}** Session **{session_code}**\n' \
-        #                               f'You can use `{prefix}bleave {session_code}` at any time to leave this Session. Be ' \
-        #                               f'aware that the Session Code is not the host\'s Dodo code.\n\n' \
-        #                               f'You will receive the Host\'s Dodo Code when your group is called.'
-        #                         await user.send(embed=tools.single_embed(msg))
-        #                         msg = f'**{user.mention}** has joined **Group {place}**.'
-        #                         private_channel = self.client.get_channel(self.sessions[session_code]['private_session'])
-        #                         await private_channel.send(embed=tools.single_embed(msg), delete_after=5)
-        #                         host = discord.utils.get(guild.members, id=self.sessions[session_code]['host'])
-        #                         await self.show_queue(host)
-        #                         return
-        #                 except AttributeError as e:
-        #                     print('More than one session found in the session file for this user', e)
-        #                     pass
-        #
-        #             await user.send(embed=tools.single_embed(f'Sorry, the Session you are trying to join is full.'))
-        #
-        # # match star
-        # elif emoji == reactions[2]:
-        #     for session_code in self.sessions:
-        #         if self.sessions[session_code]['message_id'] == message:
-        #             if await self.is_host(user) and user.id != 193416878717140992:
-        #                 msg = f'You cannot **join** a session if you are **Hosting**.'
-        #                 await user.send(embed=tools.single_embed_neg(msg))
-        #                 return
-        #
-        #             if user.id == self.sessions[session_code]['host'] and user.id != 193416878717140992:
-        #                 await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-        #                 return
-        #
-        #             ban_list = self.sessions[session_code]['ban_list']
-        #             if user.id in ban_list:
-        #                 msg = f'I\'m sorry. You are unable to join Session **{session_code}**.'
-        #                 await user.send(embed=tools.single_embed_neg(msg))
-        #                 return
-        #
-        #             _open = self.sessions[session_code]['open']
-        #             if not _open:
-        #                 await user.send(embed=tools.single_embed(f'This session is currently closed to new guests.'))
-        #                 return
-        #
-        #             for place, group in self.sessions[session_code]['groups'].items():
-        #                 if user.id in group and user.id != 193416878717140992:
-        #                     msg = f'You have already joined Session **{session_code}**.'
-        #                     await user.send(embed=tools.single_embed(msg))
-        #                     return
-        #
-        #             members_per_group = self.sessions[session_code]['members_per']
-        #             for place, group in self.sessions[session_code]['groups'].items():
-        #                 try:
-        #                     if len(group) < members_per_group:
-        #                         group.append(user.id)
-        #                         prefix = await self.show_prefix(guild)
-        #                         msg = f'You have joined a BETA session\n' \
-        #                               f'**Group {place}** Session **{session_code}**\n' \
-        #                               f'You can use `{prefix}bleave {session_code}` at any time to leave this Session. Be ' \
-        #                               f'aware that the Session Code is not the host\'s Dodo code.\n\n' \
-        #                               f'You will receive the Host\'s Dodo Code when your group is called.\n\n'
-        #                         await user.send(embed=tools.single_embed(msg))
-        #                         msg = f'**{user.mention}** has joined **Group {place}**.'
-        #                         private_channel = self.client.get_channel(
-        #                             self.sessions[session_code]['private_session']
-        #                         )
-        #                         await private_channel.send(embed=tools.single_embed(msg), delete_after=5)
-        #                         host = discord.utils.get(guild.members, id=self.sessions[session_code]['host'])
-        #                         await self.show_queue(host)
-        #                         return
-        #                 except AttributeError as e:
-        #                     print('More than one session found in the session file for this user', e)
-        #                     pass
-        #
-        #             await user.send(embed=tools.single_embed(f'Sorry, the Session you are trying to join is full.'))
 
     async def write_session(self):
         with open('sessions/session.json', 'w') as f:
