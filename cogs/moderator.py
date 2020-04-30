@@ -205,7 +205,7 @@ class Moderator(commands.Cog):
                 reason = 'A reason was not given.'
             await member.send(f'You have been banned from {ctx.guild.name}.\n'
                               f'Reason: {reason}')
-        else:
+        if answer == 'no':
             await ctx.send(embed=tools.single_embed(f'Ban cancelled.'))
 
     @commands.command()
@@ -214,21 +214,21 @@ class Moderator(commands.Cog):
         if not await self.admin_cog_on(ctx):
             return
 
-        def check(m):
-            return m.author == ctx.message.author and m.channel == ctx.channel
-
-        await ctx.send(embed=tools.single_embed(f'Are you sure you want to kick {member.display_name}?\n'
-                                                f'[yes/no]'))
-        msg = await self.client.wait_for('message', check=check)
-        if 'yes' in msg.content:
+        msg = f'Are you sure you want to kick {member.display_name}?'
+        if reason is not None:
+            msg += f'\nReason: {reason}'
+        prompt = await ctx.send(embed=tools.single_embed(msg))
+        answer = await self.yes_no_buttons(prompt, ctx.author)
+        if answer == 'yes':
             await ctx.send(embed=tools.single_embed(f'{member.mention}: **See ya, my guy.** :hiking_boot:'))
             await member.kick()
+
             if reason is None:
                 reason = 'A reason was not given.'
             await member.send(f'You have been kicked from {ctx.guild.name}.\n'
                               f'Reason: {reason}')
-        else:
-            await ctx.send(embed=tools.single_embed(f'Kick aborted.'))
+        if answer == 'no':
+            await ctx.send(embed=tools.single_embed(f'Kick cancelled.'))
 
     @commands.command(aliases=['delbl'])
     @commands.has_permissions(administrator=True)
