@@ -7,8 +7,6 @@ from collections import OrderedDict
 from datetime import datetime
 
 mae_banner = 'https://i.imgur.com/HffuudZ.jpg'
-# _spam = None
-# _staff_support = 694673589940781126
 
 
 class Rep(commands.Cog):
@@ -234,6 +232,41 @@ class Rep(commands.Cog):
         await review_chan.send(embed=embed)
 
         await self.assign_new_role(member)
+
+        # notify the user if the current channel is not the review channel
+        if ctx.channel.id != review_chan.id:
+            await ctx.send(embed=tools.single_embed(f'Thank you, **{ctx.author.display_name}**!\n'
+                                                    f'Your review has been received and posted in '
+                                                    f'{review_chan.mention}.'))
+
+    @commands.command(aliases=['mpos'])
+    @commands.cooldown(1, 60, commands.BucketType.user)
+    async def mass_pos(self, ctx, *, review: str = None):
+        if await self.can_bypass_cooldown(ctx):
+            self.pos.reset_cooldown(ctx)
+        if not await self.rep_cog_on(ctx):
+            return
+
+        members = [m for m in ctx.guild.members if m.mentioned_in(ctx.message)]
+        for member in members:
+            database.add_pos(member)
+            database.add_review(member, ctx.author, review)
+            await self.assign_new_role(member)
+
+        message = f'**{", ".join(m.display_name for m in members)}**  each gained 1 positive review from **{ctx.author.display_name}**!\n\n'
+        if review is None:
+            review = f'Sadly, {ctx.author.display_name} did not leave a message. :pig: *Snort!*'
+        message += f'**{ctx.author.display_name}** said: \n"{review}"'
+
+        database.add_reviews_given(ctx.author)
+
+        # create embed and post it in the review channel
+        embed = discord.Embed(color=discord.Color.green(), description=message)
+        embed.set_thumbnail(url=self.client.user.avatar_url)
+        time = tools.format_date_long(datetime.now())
+        embed.set_footer(text=f'{time}')
+        review_chan = database.get_review_channel(ctx.guild)
+        await review_chan.send(embed=embed)
 
         # notify the user if the current channel is not the review channel
         if ctx.channel.id != review_chan.id:
