@@ -43,6 +43,16 @@ class Information(commands.Cog):
         await ctx.send(embed=tools.single_embed(f'Incident date recorded. Last incident was `{i}` ago.'))
 
     @commands.command()
+    async def find(self, ctx, member):
+        members = [m for m in ctx.guild.members if member in m.display_name.lower() or member in m.name.lower()]
+        description = '\n'.join([f'{m.name} / {m.display_name} ({m.id})' for m in members])
+        if len(description) > 2000:
+            await ctx.send(embed=tools.single_embed(f'Your search is too broad. Try to be more specific.'))
+            return
+        embed = discord.Embed(title='Found Members', description=description, color=discord.Color.green())
+        await ctx.send(embed=embed)
+
+    @commands.command()
     @commands.cooldown(5, 60, commands.BucketType.user)
     async def who(self, ctx, member: discord.Member):
         joined_guild_human_readable = tools.display_time(tools.to_seconds(member.joined_at), 3)
@@ -89,6 +99,27 @@ class Information(commands.Cog):
         else:
             db.set_afk(ctx.author, 1, ' '.join(autoresponse).replace("'", "\'"))
             await ctx.send(embed=tools.single_embed(f'AFK message set to \n> {" ".join(autoresponse)}'))
+            # add image
+
+    @commands.command()
+    async def report(self, ctx, member: discord.Member, *, report: str = None):
+        await ctx.message.delete()
+        channel = db.get_administrative(ctx.guild)
+
+        embed = discord.Embed(title='Report', description=report, color=discord.Color.red())
+        reporter = f'Name: {ctx.author.mention} ({ctx.author})\n' \
+                   f'Joined: {tools.format_date(ctx.author.joined_at)}\n' \
+                   f'Created: {tools.format_date(ctx.author.joined_at)}\n' \
+                   f'Context: {ctx.channel.mention}\n' \
+                   f'[Jump to Message]({ctx.message.jump_url})'
+        embed.add_field(name='Reporter', value=reporter)
+        reported = f'Name: {member.mention} ({member})\n' \
+                   f'Joined: {tools.format_date(member.joined_at)}\n' \
+                   f'Created: {tools.format_date(member.joined_at)}\n' \
+                   f'ID: {member.id}'
+        embed.add_field(name='Reported', value=reported)
+        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar_url)
+        await channel.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_message(self, message):
