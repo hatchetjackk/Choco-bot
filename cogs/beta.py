@@ -104,7 +104,8 @@ class BetaFeatures(commands.Cog):
         :param ctx:
         :return:
         """
-        # if ctx.author.id != 193416878717140992:
+        # testers = [193416878717140992, 405529687994138627, 386190240836222976, 349608195020554241]
+        # if ctx.author.id not in testers:
         #     await ctx.send(embed=tools.single_embed(f'Sorry, the beta is closed at the moment.'))
         private_session = await self.create_private_channel(ctx, ctx.author)
         if not private_session:
@@ -438,7 +439,7 @@ class BetaFeatures(commands.Cog):
                               f':exclamation: Enter positive integers only between 1 and 20.'
                 embed = await self.dms_embed(title + ' (3/6)', description)
                 await prompt.edit(embed=embed)
-        await msg.delete()
+        # await msg.delete()
 
         # guests per group
         description = f'Dodo Code: `{dodo_code}`\n' \
@@ -959,7 +960,6 @@ class BetaFeatures(commands.Cog):
                     print(f'an error occurred when sending a dodo code: {e}')
             for uid in self.sessions[session_code]['groups'][place]:
                 history.append(uid)
-            # history.append(self.sessions[session_code]['groups'][place])
             del self.sessions[session_code]['groups'][place]
 
             # notify groups that they have moved up
