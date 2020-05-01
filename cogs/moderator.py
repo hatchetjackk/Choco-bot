@@ -210,7 +210,7 @@ class Moderator(commands.Cog):
 
     @commands.command()
     @commands.has_permissions(kick_members=True)
-    async def kick(self, ctx, member: discord.Member, reason: str = None):
+    async def kick(self, ctx, member: discord.Member, *, reason: str = None):
         if not await self.admin_cog_on(ctx):
             return
 
@@ -402,12 +402,20 @@ class Moderator(commands.Cog):
             await ctx.send(embed=tools.single_embed_tooltip(f'You do not have permission to run this command.'),
                            delete_after=30)
 
-    @warn.error
     @warnings.error
     @clear_warnings.error
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.send(embed=tools.single_embed_tooltip(f'You are missing the `{error.param.name}` argument.'),
+                           delete_after=30)
+
+    @warn.error
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send(embed=tools.single_embed_tooltip(f'You are missing the `{error.param.name}` argument.'),
+                           delete_after=30)
+        if isinstance(error, commands.BadArgument):
+            await ctx.send(embed=tools.single_embed(f'{error}'),
                            delete_after=30)
 
 
