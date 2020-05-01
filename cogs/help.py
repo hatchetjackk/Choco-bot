@@ -3,14 +3,14 @@ import discord
 import util.db as database
 from discord.ext import commands
 
-rep_cmds = ['rep', 'pos', 'neg', 'repboard', 'karma', 'karmaboard', 'top_reviewers']
+rep_cmds = ['rep', 'pos', 'mpos', 'neg', 'repboard', 'karma', 'karmaboard', 'top_reviewers']
 dms_cmds = ['create', 'close', 'opn', 'end', 'join', 'leave', 'menu', 'send', 'dodo', 'show', 'notify', 'welcome',
             'guest_kick', 'guest_ban', 'guest_unban', 'guest_bans', 'admin_end']
-fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd', 'who', 'guild', 'pfp']
+fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd', 'who', 'guild', 'pfp', 'find']
 adm_cmds = ['settings', 'prefix', 'spam', 'admin_channel', 'autorole', 'add', 'sub', 'reset', 'warn',
             'warnings', 'clear_warnings', 'kick', 'ban', 'purge', 'blacklist', 'get_blacklist',
             'delete_blacklist', 'role']
-misc_cmds = ['bug', 'nick', 'afk']
+misc_cmds = ['bug', 'nick', 'afk', 'report']
 dev_cmds = ['reboot', 'reload', 'load']
 
 
@@ -20,6 +20,7 @@ class Help(commands.Cog):
 
     @commands.group(aliases=['help'])
     async def help_page(self, ctx):
+        # format commands into readable lists
         def list_cmds(cmds):
             if 7 < len(cmds) < 10:
                 a = cmds[:7]
@@ -100,6 +101,12 @@ class Help(commands.Cog):
     """ misc commands """
 
     @help_page.group()
+    async def report(self, ctx):
+        args = '@user message'
+        description = f'Report a user for harmful content. Reports are sent to staff and deleted.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
     async def afk(self, ctx):
         args = 'autoresponse'
         description = f'Set an autoresponse if you are AFK. Whenever a user pings you, this response will be displayed. ' \
@@ -163,6 +170,13 @@ class Help(commands.Cog):
         args = '@user optional_message'
         description = 'Give a user a positive review which increases their **rep**. The message is optional and appears in ' \
                       'the review channel if configured. This command is purged immediately after sending.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    async def mpos(self, ctx):
+        args = '@user1 @user2 @user3 (etc) optional_message'
+        description = 'Need to give a lot of reviews at once? Now you can do it all in one message. Anyone mentioned in ' \
+                      'the mpos message will get a positive review. Affected by a 1 minute cooldown.'
         await self.help2_embed(ctx, args, description)
 
     @help_page.group()
@@ -306,6 +320,12 @@ class Help(commands.Cog):
         await self.help2_embed(ctx, args, description)
 
     """ fun commands """
+
+    @help_page.group()
+    async def find(self, ctx):
+        args = 'input'
+        description = f'Search for users in the server.'
+        await self.help2_embed(ctx, args, description)
 
     @help_page.group()
     async def roll(self, ctx):
