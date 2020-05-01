@@ -66,6 +66,7 @@ class Karma(commands.Cog):
                 if counter == k:
                     msg = msg + v
             leaderboard.append(msg)
+            counter += 1
         if ctx.author.display_name not in array:
             karma, index = database.get_karma_position(ctx.author)
             append_author = f'\n----------------\n{index}: **{ctx.author.display_name}** - `{karma}` points'
