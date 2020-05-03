@@ -17,13 +17,14 @@ class Personality(commands.Cog):
         if message.author.bot:
             pass
         else:
-            key = ['turnip', 'turnips']
-            if any(item == message.content.lower() for item in key):
-                try:
-                    turnip_emoji = self.client.get_emoji(694822764699320411)
-                    await message.add_reaction(turnip_emoji)
-                except Exception:
-                    pass
+            pass
+            # key = ['turnip', 'turnips']
+            # if any(item == message.content.lower() for item in key):
+            #     try:
+            #         turnip_emoji = self.client.get_emoji(694822764699320411)
+            #         await message.add_reaction(turnip_emoji)
+            #     except Exception:
+            #         pass
 
 
 def setup(client):
