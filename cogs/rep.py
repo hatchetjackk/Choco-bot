@@ -243,11 +243,15 @@ class Rep(commands.Cog):
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def mass_pos(self, ctx, *, review: str = None):
         if await self.can_bypass_cooldown(ctx):
-            self.pos.reset_cooldown(ctx)
+            self.mass_pos.reset_cooldown(ctx)
+
         if not await self.rep_cog_on(ctx):
             return
 
-        members = [m for m in ctx.guild.members if m.mentioned_in(ctx.message)]
+        members = [m for m in ctx.guild.members if m.mentioned_in(ctx.message) if m is not ctx.author]
+        if len(members) < 1:
+            await ctx.send(embed=tools.single_embed(f'No one was mentioned in your review.'))
+            return
         for member in members:
             database.add_pos(member)
             database.add_review(member, ctx.author, review)
