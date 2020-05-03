@@ -9,7 +9,7 @@ dms_cmds = ['create', 'close', 'opn', 'end', 'join', 'leave', 'menu', 'send', 'd
 fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd', 'who', 'guild', 'pfp', 'find']
 adm_cmds = ['settings', 'prefix', 'spam', 'admin_channel', 'autorole', 'add', 'sub', 'reset', 'warn',
             'warnings', 'clear_warnings', 'kick', 'ban', 'purge', 'blacklist', 'get_blacklist',
-            'delete_blacklist', 'role']
+            'delete_blacklist', 'role', 'archive']
 misc_cmds = ['bug', 'nick', 'afk', 'report']
 dev_cmds = ['reboot', 'reload', 'load']
 
@@ -383,6 +383,12 @@ class Help(commands.Cog):
                     f'`{prefix}{func} mw on/off` - Turn the `mw` cog on/off.\n'
         footer = f'Related commands: {", ".join([r for r in adm_cmds if r != func])}'
         await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
+
+    @help_page.group()
+    async def archive(self, ctx):
+        args = None
+        description = 'Archive the current channel. This replaces the channel with a new clone!'
+        await self.help2_embed(ctx, args, description)
 
     @help_page.group()
     async def role(self, ctx):
