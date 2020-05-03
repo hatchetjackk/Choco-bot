@@ -42,15 +42,34 @@ class Information(commands.Cog):
             json.dump(time.time(), f, indent=4)
         await ctx.send(embed=tools.single_embed(f'Incident date recorded. Last incident was `{i}` ago.'))
 
+    # @commands.group()
     @commands.command()
     async def find(self, ctx, member):
-        members = [m for m in ctx.guild.members if member in m.display_name.lower() or member in m.name.lower()]
-        description = '\n'.join([f'{m.name} / {m.display_name} ({m.id})' for m in members])
-        if len(description) > 2000:
-            await ctx.send(embed=tools.single_embed(f'Your search is too broad. Try to be more specific.'))
-            return
-        embed = discord.Embed(title='Found Members', description=description, color=discord.Color.green())
-        await ctx.send(embed=embed)
+        if ctx.invoked_subcommand is None:
+            members = [m for m in ctx.guild.members if member in m.display_name.lower() or member in m.name.lower() or member in str(m.id)]
+            description = '\n'.join([f'{m.name} / {m.display_name} ({m.id})' for m in members])
+            if len(description) > 2000:
+                await ctx.send(embed=tools.single_embed(f'Your search is too broad. Try to be more specific.'))
+                return
+            embed = discord.Embed(title='Found Members', description=description, color=discord.Color.green())
+            await ctx.send(embed=embed)
+
+    # @commands.command()
+    # async def omit(self, ctx, *criteria):
+    #     results = []
+    #     members = ctx.guild.members
+    #     for m in members:
+    #         for c in criteria:
+    #             if c not in m.display_name:
+    #                 if m not in results:
+    #                     results.append(m)
+    #     # members = [m for m in ctx.guild.members if member not in m.display_name.lower()]
+    #     description = '\n'.join([f'{m.name} / {m.display_name} ({m.id})' for m in results])
+    #     if len(description) > 2000:
+    #         await ctx.send(embed=tools.single_embed(f'Your search is too broad. Try to be more specific. Results: {len(results)}'))
+    #         return
+    #     embed = discord.Embed(title='Found Members', description=description, color=discord.Color.green())
+    #     await ctx.send(embed=embed)
 
     @commands.command()
     @commands.cooldown(5, 60, commands.BucketType.user)
