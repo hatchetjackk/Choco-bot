@@ -6,6 +6,7 @@ import random
 import util.db as database
 import util.tools as tools
 from discord.ext import commands
+from datetime import datetime
 
 mae_banner = 'https://i.imgur.com/HffuudZ.jpg'
 mae_thumb = 'https://i.imgur.com/wl2MZIV.png'
@@ -230,6 +231,16 @@ class Moderator(commands.Cog):
         if answer == 'no':
             await ctx.send(embed=tools.single_embed(f'Kick cancelled.'))
 
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def archive(self, ctx):
+        current_channel = ctx.channel
+        await ctx.channel.clone(name=current_channel.name)
+        new_category = discord.utils.get(ctx.guild.categories, name='[――staff archives――]')
+        time = tools.format_date(datetime.now(), 2)
+        new_channel_name = f'{current_channel.name}-{time}'
+        await current_channel.edit(name=new_channel_name, category=new_category, sync_permissions=True)
+
     @commands.command(aliases=['delbl'])
     @commands.has_permissions(administrator=True)
     async def remove_blacklist(self, ctx, *item):
@@ -275,6 +286,52 @@ class Moderator(commands.Cog):
             await ctx.send(embed=tools.single_embed(f'Item(s) blacklisted: {", ".join(added)}'))
         if len(exists) > 0:
             await ctx.send(embed=tools.single_embed_neg(f'{", ".join(exists)} already blacklisted.'))
+
+    @commands.command(aliases=['delfilter'])
+    @commands.has_permissions(administrator=True)
+    async def remove_filter(self, ctx, *item):
+        if not await self.admin_cog_on(ctx):
+            return
+        void = []
+        deleted = []
+        for b in item:
+            if database.in_check_filter(ctx.guild, b):
+                database.remove_from_filter(ctx.guild, b)
+                deleted.append(b)
+            else:
+                void.append(b)
+        if len(deleted) > 0:
+            await ctx.send(embed=tools.single_embed(f'Item(s) removed: {", ".join(deleted)}'))
+        if len(void) > 0:
+            await ctx.send(embed=tools.single_embed_neg(f'{", ".join(void)} not found.'))
+
+    @commands.command(aliases=['gfilter'])
+    @commands.has_permissions(administrator=True)
+    async def get_filter(self, ctx, *words):
+        if not await self.admin_cog_on(ctx):
+            return
+        fltr = '\n'.join(database.get_filter(ctx.guild))
+        msg = f'**Current Filters**\n' \
+              f'```\n{fltr}```'
+        await ctx.send(embed=tools.single_embed(msg))
+
+    @commands.command(aliases=['filter'])
+    @commands.has_permissions(administrator=True)
+    async def _filter(self, ctx, *words):
+        if not await self.admin_cog_on(ctx):
+            return
+        exists = []
+        added = []
+        for b in words:
+            if database.in_check_filter(ctx.guild, b):
+                exists.append(b)
+            else:
+                database.add_to_filter(ctx.guild, b)
+                added.append(b)
+        if len(added) > 0:
+            await ctx.send(embed=tools.single_embed(f'Item(s) filtered: {", ".join(added)}'))
+        if len(exists) > 0:
+            await ctx.send(embed=tools.single_embed_neg(f'{", ".join(exists)} already filtered.'))
 
     @commands.command(aliases=['mute'])
     @commands.is_owner()
