@@ -97,16 +97,25 @@ class BetaFeatures(commands.Cog):
         return private_channel
 
     @commands.command()
-    @commands.has_any_role(701854792699347065, 'ADMIN')
     async def bcreate(self, ctx):
         """
         Create a DMS session and generate the wizard
         :param ctx:
         :return:
         """
-        # testers = [193416878717140992, 405529687994138627, 386190240836222976, 349608195020554241]
-        # if ctx.author.id not in testers:
-        #     await ctx.send(embed=tools.single_embed(f'Sorry, the beta is closed at the moment.'))
+        supporter = 701854792699347065
+        testers = [139558095633252352,
+                   193416878717140992,
+                   405529687994138627,
+                   386190240836222976,
+                   349608195020554241]
+        if ctx.author.id in testers:
+            pass
+        elif supporter in [r.id for r in ctx.author.roles]:
+            pass
+        else:
+            await ctx.send(embed=tools.single_embed(f'Sorry, the beta is closed at the moment.'))
+
         private_session = await self.create_private_channel(ctx, ctx.author)
         if not private_session:
             msg = 'You already have an active Session Channel.'
@@ -368,6 +377,7 @@ class BetaFeatures(commands.Cog):
             "max_groups": max_groups,
             "members_per": per_group,
             "groups": groups,
+            "on_island": [],
             "history": [],
             "open": True
         }
@@ -588,6 +598,7 @@ class BetaFeatures(commands.Cog):
             "members_per": per_group,
             "welcome": None,
             "groups": groups,
+            "on_island": [],
             "history": [],
             "open": True
         }
@@ -767,6 +778,7 @@ class BetaFeatures(commands.Cog):
             "members_per": per_group,
             "welcome": None,
             "groups": groups,
+            "on_island": [],
             "history": [],
             "open": True
         }
@@ -818,7 +830,7 @@ class BetaFeatures(commands.Cog):
                 groups = self.sessions[session_code]['groups']
                 for place, member_list in groups.items():
                     for uid in member_list:
-                        member = self.client.get_user(uid)
+                        member = self.client.get_user(int(uid))
                         if member is None:
                             continue
                         try:
@@ -944,9 +956,24 @@ class BetaFeatures(commands.Cog):
         msg = await private_channel.send(embed=tools.single_embed(f'Sending Dodo code to **Group {place}**'), delete_after=5)
         await private_channel.fetch_message(msg.id)
 
+        # add temp check for island key
+        try:
+            if "on_island" not in self.sessions[session_code]:
+                self.sessions[session_code]["on_island"] = []
+        except Exception as e:
+            print(e)
+            pass
+
         if len(self.sessions[session_code]['groups'][place]) < 1:
             await private_channel.send(embed=tools.single_embed(f'**Group {place}** is empty.'), delete_after=5)
         else:
+            # remove previous occupants
+            try:
+                if len(self.sessions[session_code]["on_island"]) > 0:
+                    self.sessions[session_code]["on_island"] = []
+            except Exception as e:
+                print(e)
+                pass
             for user in self.sessions[session_code]['groups'][place]:
                 try:
                     member = self.client.get_user(int(user))
@@ -956,16 +983,23 @@ class BetaFeatures(commands.Cog):
                           f'Please do not forget to leave a review for your host when you finish.\n'\
                           f'**Dodo Code**: `{self.sessions[session_code]["dodo_code"]}`\n'
                     await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+                    # add new guests to island
+                    try:
+                        self.sessions[session_code]["on_island"].append(user)
+                    except Exception as e:
+                        print(e)
+                        pass
                 except Exception as e:
                     print(f'an error occurred when sending a dodo code: {e}')
             for uid in self.sessions[session_code]['groups'][place]:
                 history.append(uid)
+
             del self.sessions[session_code]['groups'][place]
 
             # notify groups that they have moved up
             for place, member_list in groups.items():
                 for uid in member_list:
-                    member = self.client.get_user(uid)
+                    member = self.client.get_user(int(uid))
                     if member is None:
                         continue
                     position = list(groups.keys()).index(place) + 1
@@ -1043,6 +1077,24 @@ class BetaFeatures(commands.Cog):
         embed = discord.Embed(title=f'Your Queue', color=discord.Color.green(), description=description)
         # embed.set_thumbnail(url=self.client.user.avatar_url)
 
+        try:
+            if "on_island" in self.sessions[session_code]:
+                on_island = self.sessions[session_code]["on_island"]
+                if len(on_island) < 1:
+                    embed.add_field(name='🏝️ On Island', value='No one is here!')
+                else:
+                    members = []
+                    for uid in on_island:
+                        member = discord.utils.get(host.guild.members, id=int(uid))
+                        if member is None:
+                            self.sessions[session_code]["on_island"].remove(uid)
+                            continue
+                        else:
+                            members.append(member.display_name)
+                    embed.add_field(name='🏝️ On Island', value='\n'.join(members), inline=False)
+        except Exception as e:
+            print(e)
+            pass
         for place, group in groups.items():
             members = []
             if len(group) == 0:
@@ -1050,17 +1102,23 @@ class BetaFeatures(commands.Cog):
                 place = f'Group {place} (0/{per_group})'
             else:
                 for uid in group:
-                    member = discord.utils.get(host.guild.members, id=uid)
+                    member = discord.utils.get(host.guild.members, id=int(uid))
                     if member is None:
                         self.sessions[session_code]['groups'][place].remove(uid)
                         continue
                     else:
-                        members.append(f'{member.mention}')
+                        members.append(f'🧳{member.display_name}')
 
             if group is not None:
                 group = '\n'.join(members)
                 place = f'Group {place} ({len(members)}/{per_group})'
             embed.add_field(name=f'{place}', value=group)
+        try:
+            if len(groups) % 2 != 0:
+                embed.add_field(name='\u200b', value='\u200b')
+        except Exception as e:
+            print(e)
+            pass
 
         send = '➡ Send next group'
         end = '⏹ End session'
@@ -1194,7 +1252,7 @@ class BetaFeatures(commands.Cog):
                 pass
             else:
                 for uid in group:
-                    member = discord.utils.get(host.guild.members, id=uid)
+                    member = discord.utils.get(host.guild.members, id=int(uid))
                     if member is None:
                         continue
                     else:
@@ -1203,7 +1261,7 @@ class BetaFeatures(commands.Cog):
         while True:
             if len(to_kick) > 0:
                 reactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '⏩', '⏹']
-                msg = '\n'.join(f'{to_kick.index(member) + 1}. {member.mention}' for member in to_kick[:10])
+                msg = '\n'.join(f'{to_kick.index(member) + 1}. {member.display_name}' for member in to_kick[:10])
                 embed = discord.Embed(title='Who do you want to kick?', description=msg, color=discord.Color.green())
                 embed.set_thumbnail(url=self.client.user.avatar_url)
                 prompt = await private_channel.send(embed=embed)
@@ -1283,7 +1341,7 @@ class BetaFeatures(commands.Cog):
                 pass
             else:
                 for uid in group:
-                    member = discord.utils.get(host.guild.members, id=uid)
+                    member = discord.utils.get(host.guild.members, id=int(uid))
                     if member is None:
                         continue
                     else:
@@ -1292,7 +1350,7 @@ class BetaFeatures(commands.Cog):
         while True:
             if len(to_ban) > 0:
                 reactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '⏩', '⏹']
-                msg = '\n'.join(f'{to_ban.index(member) + 1}. {member.mention}' for member in to_ban[:10])
+                msg = '\n'.join(f'{to_ban.index(member) + 1}. {member.display_name}' for member in to_ban[:10])
                 embed = discord.Embed(title='Who do you want to ban?', description=msg, color=discord.Color.green())
                 embed.set_thumbnail(url=self.client.user.avatar_url)
                 prompt = await private_channel.send(embed=embed)
