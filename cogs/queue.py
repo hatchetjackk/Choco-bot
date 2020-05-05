@@ -272,10 +272,8 @@ class DMS(commands.Cog):
         groups = {}
 
         for i in range(max_entries):
-            print(i)
             groups[i + 1] = []
 
-        print(groups)
         new_data = {
             "message id": session_message,
             "dodo code": dodo.upper(),
@@ -785,13 +783,20 @@ class DMS(commands.Cog):
                 for uid in member_list:
                     members_to_notify.append(uid)
 
+        could_not_notify = []
         for uid in members_to_notify:
             member = self.client.get_user(uid)
             if member is None:
                 continue
-            msg = f'You\'ve received a message from your Session host **{ctx.author.display_name}**:\n' \
-                  f'"{message}"'
-            await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+            try:
+                msg = f'You\'ve received a message from your Session host **{ctx.author.display_name}**:\n' \
+                      f'"{message}"'
+                await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+            except discord.Forbidden:
+                could_not_notify.append(member.mention)
+        msg = f'Your message has been sent.'
+        if len(could_not_notify) > 0:
+            msg += f'\nNotifications did not reach {", ".join(could_not_notify)} because of closed DMs.'
         await dms_channel.send(embed=tools.single_embed(f'Your message has been sent.'))
 
     @commands.command()
@@ -921,7 +926,6 @@ class DMS(commands.Cog):
 
         for place, group in groups.items():
             if len(group) < data[session_code]['members per group']:
-                print('x')
                 group.append(ctx.author.id)
                 msg = f'You have joined **Group {place}** in Session **{session_code}**\n' \
                       f'You can use `{prefix}leave {session_code}` at any time to leave this Session.'
@@ -960,8 +964,6 @@ class DMS(commands.Cog):
         groups = data[session_code]['groups']
         for place, group in groups.items():
             if ctx.author.id in group:
-                print('gr', group, ctx.author.id)
-
                 data[session_code]['groups'][place].remove(ctx.author.id)
                 await ctx.author.send(embed=tools.single_embed(f'You have left **Session {session_code}**.'))
                 await dms_channel.send(embed=tools.single_embed(f'{ctx.author.display_name} has **left** your queue.'))
@@ -1065,7 +1067,6 @@ class DMS(commands.Cog):
         :param payload:
         :return:
         """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
         # if payload isn't turnip
         if payload.emoji.id != _turnip_emoji:
             return
@@ -1080,6 +1081,7 @@ class DMS(commands.Cog):
         if author == self.client.user:
             return
 
+        spam = db.get_spam(guild)
         data = await tools.read_sessions()
         for session_code, value in data.items():
             # if session doesn't have a message ID, guest cannot join anyway
@@ -1121,7 +1123,15 @@ class DMS(commands.Cog):
                         prefix = await self.show_prefix(guild)
                         msg = f'You have joined **Group {place}** in Session **{session_code}**\n' \
                               f'You can use `{prefix}leave {session_code}` at any time to leave this Session.'
-                        await author.send(embed=tools.single_embed(msg))
+                        try:
+                            await author.send(embed=tools.single_embed(msg))
+                        except discord.Forbidden:
+                            print(f'Could not send group join to {author}')
+                            # channel = self.client.get_channel(payload.channel_id)
+                            # await channel.send(f'{author.mention}: Your invite could not be sent. Please verify that your DMs are open.', delete_after=5)
+                            msg = f'{author.mention}, your DMs appear to be turned off which prevents Mae from sending you queue updates'
+                            await spam.send(embed=tools.single_embed_neg(msg))
+                            return
                         msg = f'**{author.display_name}** has joined **Group {place}**.'
                         dms = self.client.get_channel(data[session_code]['session'])
                         await dms.send(embed=tools.single_embed(msg))
@@ -1132,7 +1142,11 @@ class DMS(commands.Cog):
                     else:
                         continue
 
-                await author.send(f'Sorry, the Session you are trying to join is full.')
+                try:
+                    await author.send(f'Sorry, the Session you are trying to join is full.')
+                except discord.Forbidden:
+                    msg = f'{author.mention}, your DMs appear to be turned off which prevents Mae from sending you queue updates'
+                    await spam.send(embed=tools.single_embed_neg(msg))
 
     async def wizard_end(self, ctx):
         data = await tools.read_sessions()
