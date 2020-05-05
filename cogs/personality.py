@@ -18,6 +18,15 @@ class Personality(commands.Cog):
             pass
         else:
             pass
+            # if message.author.id == 505019512702238730:
+            #     await message.add_reaction('🇸')
+            #     await message.add_reaction('🇮')
+            #     await message.add_reaction('🇲')
+            #     await message.add_reaction('🇵')
+
+            # if 'cube' in message.content:
+            #     await message.add_reaction('🧊')
+
             # key = ['turnip', 'turnips']
             # if any(item == message.content.lower() for item in key):
             #     try:
