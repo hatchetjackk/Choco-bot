@@ -125,11 +125,12 @@ class Rep(commands.Cog):
         turnip_emoji = self.client.get_emoji(694822764699320411)
 
         array = {}
+        print(1)
         for member in ctx.guild.members:
             if member.bot:
                 continue
-            # if not database.in_members_table(member):
-            #     database.add_member(member)
+            if not database.in_members_table(member):
+                database.add_member(member)
             reviews_given = database.get_reviews_given(member)
             array[member.display_name] = reviews_given
 
@@ -239,6 +240,8 @@ class Rep(commands.Cog):
                                                     f'Your review has been received and posted in '
                                                     f'{review_chan.mention}.'))
 
+        await ctx.message.delete()
+
     @commands.command(aliases=['mpos'])
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def mass_pos(self, ctx, *, review: str = None):
@@ -277,6 +280,8 @@ class Rep(commands.Cog):
             await ctx.send(embed=tools.single_embed(f'Thank you, **{ctx.author.display_name}**!\n'
                                                     f'Your review has been received and posted in '
                                                     f'{review_chan.mention}.'))
+
+        await ctx.message.delete()
 
     @commands.command(aliases=['n'])
     @commands.cooldown(2, 360, commands.BucketType.user)
