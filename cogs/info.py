@@ -82,7 +82,11 @@ class Information(commands.Cog):
         if member.activity is not None:
             embed.add_field(name='Activity', value=member.activity.name)
         embed.add_field(name='Joined Guild', value=f'{tools.format_date(member.joined_at)}\n{joined_guild_human_readable} ago', inline=False)
-        embed.add_field(name='Roles', value=', '.join([role.name for role in member.roles if role.name != '@everyone']))
+        roles = [role.name for role in member.roles if role.name != '@everyone']
+        if len(roles) > 0:
+            embed.add_field(name='Roles', value=', '.join(roles))
+        else:
+            embed.add_field(name='Roles', value='None')
         embed.set_footer(text=f'Joined Discord {tools.format_date(member.joined_at)} ({joined_discord_human_readable} ago)')
         embed.set_thumbnail(url=member.avatar_url)
         await ctx.send(embed=embed)
@@ -142,15 +146,6 @@ class Information(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        # if message.author.id == 505019512702238730:
-        #     await message.add_reaction('🇸')
-        #     await message.add_reaction('🇮')
-        #     await message.add_reaction('🇲')
-        #     await message.add_reaction('🇵')
-
-        if 'cube' in message.content:
-            await message.add_reaction('🧊')
-
         if message.author.bot:
             return
 
@@ -173,6 +168,9 @@ class Information(commands.Cog):
             await ctx.send(embed=tools.single_embed('I could not find that member'), delete_after=15)
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.send(embed=tools.single_embed(f'{error}'), delete_after=30)
+        if isinstance(error, discord.HTTPException):
+            await ctx.send(embed=tools.single_embed(f'An error occurred when searching for this user.'), delete_after=30)
+            print(error)
 
 
 def setup(client):
