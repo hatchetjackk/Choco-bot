@@ -1,5 +1,4 @@
 import asyncio
-import inspect
 import json
 import discord
 import aiohttp
@@ -18,7 +17,7 @@ class BetaFeatures(commands.Cog):
         self.sessions = {}
         with open('sessions/session.json', 'r') as f:
             self.sessions = json.load(f)
-        # self.loop_file_write.start()
+
 
     @commands.command()
     @commands.is_owner()
@@ -27,6 +26,38 @@ class BetaFeatures(commands.Cog):
         with open('sessions/session.json', 'w') as f:
             json.dump(self.sessions, f, indent=4)
         print('sessions overwritten')
+
+    @commands.command()
+    @commands.is_owner()
+    async def beta_giveaway(self, ctx, spots: int, *, description):
+        channel = self.client.get_channel(694277623110696960)
+        # channel = self.client.get_channel(701258725385568307)
+        embed = discord.Embed(title='Mae Beta Giveaway', description=description, color=discord.Color.green())
+        embed.set_thumbnail(url=self.client.user.avatar_url)
+        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar_url)
+        prompt = await channel.send(embed=embed)
+        await prompt.add_reaction('🐷')
+
+        def check(react, user):
+            return react.message.id == prompt.id and not user.bot
+        count = 0
+        while count < spots:
+            reaction, member = await self.client.wait_for('reaction_add', check=check)
+            if reaction.emoji == '🐷':
+                mae_beta = ctx.guild.get_role(707321889621540876)
+                if 'mae-beta' in [r.name for r in member.roles]:
+                    pass
+                else:
+                    count += 1
+                    await member.add_roles(mae_beta)
+                    msg = 'You have gotten access to the Mae-Beta! To start hosting, use the command `r:bcreate` in the ' \
+                          'bot-commands channel.'
+                    await member.send(embed=tools.single_embed(msg))
+        embed = discord.Embed(title='The giveaway has ended! Thank you for your interest and support.',
+                              color=discord.Color.green())
+        embed.set_thumbnail(url=self.client.user.avatar_url)
+        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar_url)
+        await prompt.edit(embed=embed)
 
     @staticmethod
     async def show_prefix(guild):
@@ -97,30 +128,20 @@ class BetaFeatures(commands.Cog):
         return private_channel
 
     @commands.command()
+    @commands.has_any_role('mae-supporters', 'mae-beta')
     async def bcreate(self, ctx):
         """
         Create a DMS session and generate the wizard
         :param ctx:
         :return:
         """
-        supporter = 701854792699347065
-        testers = [139558095633252352,
-                   193416878717140992,
-                   405529687994138627,
-                   386190240836222976,
-                   349608195020554241]
-        if ctx.author.id in testers:
-            pass
-        elif supporter in [r.id for r in ctx.author.roles]:
-            pass
-        else:
-            await ctx.send(embed=tools.single_embed(f'Sorry, the beta is closed at the moment.'))
+        # await ctx.send(embed=tools.single_embed(f'Sorry, the this command is in closed beta at the moment.'))
 
         private_session = await self.create_private_channel(ctx, ctx.author)
-        if not private_session:
-            msg = 'You already have an active Session Channel.'
-            await ctx.send(embed=tools.single_embed_neg(msg))
-            return
+        # if not private_session:
+        #     msg = 'You already have an active Session Channel.'
+        #     await ctx.send(embed=tools.single_embed_neg(msg))
+        #     return
         msg = f'Your private Session Channel has been created: {private_session.mention}'
         notification = await ctx.send(embed=tools.single_embed(msg))
 
@@ -926,6 +947,9 @@ class BetaFeatures(commands.Cog):
                         for place, member_list in self.sessions[session_code]['groups'].items():
                             if ctx.author.id in member_list:
                                 self.sessions[session_code]['groups'][place].remove(ctx.author.id)
+
+                                # move queue up
+
                                 msg = f'You have left Session {session_code}.'
                                 await ctx.send(embed=tools.single_embed(msg), delete_after=5)
                                 msg = f'**{ctx.author.mention}** has left your queue.'
@@ -938,8 +962,6 @@ class BetaFeatures(commands.Cog):
                                 await self.write_session()
                                 return
                 await prompt.delete()
-
-            # move everyone up in the queue
 
     async def bsend(self, host):
         """
@@ -1062,10 +1084,10 @@ class BetaFeatures(commands.Cog):
         groups = self.sessions[session_code]['groups']
         per_group = self.sessions[session_code]['members_per']
 
-        if len(self.sessions[session_code]['groups'].keys()) < 1:
-            msg = f'You are at the end of your groups. Please end your session and consider starting a new session.'
-            await private_channel.send(embed=tools.single_embed(msg))
-            return
+        # if len(self.sessions[session_code]['groups'].keys()) < 1:
+        #     msg = f'You are at the end of your groups. Please end your session and consider starting a new session.'
+        #     await private_channel.send(embed=tools.single_embed(msg))
+        #     return
 
         dodo_code = self.sessions[session_code]['dodo_code']
         status = self.sessions[session_code]['open']
@@ -1095,30 +1117,33 @@ class BetaFeatures(commands.Cog):
         except Exception as e:
             print(e)
             pass
-        for place, group in groups.items():
-            members = []
-            if len(group) == 0:
-                group = None
-                place = f'Group {place} (0/{per_group})'
-            else:
-                for uid in group:
-                    member = discord.utils.get(host.guild.members, id=int(uid))
-                    if member is None:
-                        self.sessions[session_code]['groups'][place].remove(uid)
-                        continue
-                    else:
-                        members.append(f'🧳{member.display_name}')
+        if len(groups.items()) < 1:
+            embed.add_field(name=f'There are no groups in your queue', value='\u200b')
+        else:
+            for place, group in groups.items():
+                members = []
+                if len(group) == 0:
+                    group = None
+                    place = f'Group {place} (0/{per_group})'
+                else:
+                    for uid in group:
+                        member = discord.utils.get(host.guild.members, id=int(uid))
+                        if member is None:
+                            self.sessions[session_code]['groups'][place].remove(uid)
+                            continue
+                        else:
+                            members.append(f'🧳{member.display_name}')
 
-            if group is not None:
-                group = '\n'.join(members)
-                place = f'Group {place} ({len(members)}/{per_group})'
-            embed.add_field(name=f'{place}', value=group)
-        try:
-            if len(groups) % 2 != 0:
-                embed.add_field(name='\u200b', value='\u200b')
-        except Exception as e:
-            print(e)
-            pass
+                if group is not None:
+                    group = '\n'.join(members)
+                    place = f'Group {place} ({len(members)}/{per_group})'
+                embed.add_field(name=f'{place}', value=group)
+            try:
+                if len(groups) % 2 != 0:
+                    embed.add_field(name='\u200b', value='\u200b')
+            except Exception as e:
+                print(e)
+                pass
 
         send = '➡ Send next group'
         end = '⏹ End session'
@@ -1479,7 +1504,8 @@ class BetaFeatures(commands.Cog):
                         await asyncio.sleep(0)
 
                         def check_react(react, actor):
-                            return react.message.id == confirm.id and actor.id == user.id
+                            # return react.message.id == confirm.id and actor.id == user.id
+                            return react.message.id == confirm.id and not actor.bot
 
                         reaction, member = await self.client.wait_for('reaction_add', check=check_react)
                         if reaction.emoji == '🇾':
@@ -1561,8 +1587,8 @@ class BetaFeatures(commands.Cog):
                                 prefix = await self.show_prefix(guild)
                                 msg = f'You have joined a BETA session\n' \
                                       f'**Group {place}** Session **{session_code}**\n' \
-                                      f'You can use `{prefix}bleave` (in any channel) to view and leave any sessions ' \
-                                      f'you have joined.' \
+                                      f'You can use `{prefix}bleave` in the bot-commands channel to view and leave any ' \
+                                      f'beta sessions you have joined.' \
                                       f'You will receive the Host\'s Dodo Code when your group is called.'
                                 await user.send(embed=tools.single_embed(msg))
                                 msg = f'**{user.mention}** has joined **Group {place}**.'
