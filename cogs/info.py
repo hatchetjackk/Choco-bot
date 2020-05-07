@@ -71,12 +71,21 @@ class Information(commands.Cog):
     #     embed = discord.Embed(title='Found Members', description=description, color=discord.Color.green())
     #     await ctx.send(embed=embed)
 
+    async def can_bypass_cooldown(self, ctx):
+        if ctx.author.permissions_in(ctx.channel).administrator:
+            return True
+        elif await self.client.is_owner(ctx.author):
+            return True
+        return False
+
     @commands.command()
     @commands.cooldown(5, 60, commands.BucketType.user)
     async def who(self, ctx, member: discord.Member):
+        if await self.can_bypass_cooldown(ctx):
+            self.who.reset_cooldown(ctx)
         joined_guild_human_readable = tools.display_time(tools.to_seconds(member.joined_at), 3)
         joined_discord_human_readable = tools.display_time(tools.to_seconds(member.created_at), 3)
-        embed = discord.Embed(title=member.display_name, color=member.colour)
+        embed = discord.Embed(title=member.display_name, color=member.colour, description=member.mention)
         embed.add_field(name='ID', value=member.id)
         embed.add_field(name='Status', value=member.status)
         if member.activity is not None:
@@ -126,9 +135,7 @@ class Information(commands.Cog):
 
     @commands.command()
     async def report(self, ctx, member: discord.Member, *, report: str = None):
-        await ctx.message.delete()
         channel = db.get_administrative(ctx.guild)
-
         embed = discord.Embed(title='Report', description=report, color=discord.Color.red())
         reporter = f'Name: {ctx.author.mention} ({ctx.author})\n' \
                    f'Joined: {tools.format_date(ctx.author.joined_at)}\n' \
@@ -141,8 +148,14 @@ class Information(commands.Cog):
                    f'Created: {tools.format_date(member.joined_at)}\n' \
                    f'ID: {member.id}'
         embed.add_field(name='Reported', value=reported)
+        try:
+            url = ctx.message.attachments[0].url
+            embed.set_image(url=url)
+        except IndexError:
+            print('index error')
         embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar_url)
         await channel.send(embed=embed)
+        await ctx.message.delete()
 
     @commands.Cog.listener()
     async def on_message(self, message):
