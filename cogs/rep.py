@@ -204,7 +204,6 @@ class Rep(commands.Cog):
             self.pos.reset_cooldown(ctx)
         if not await self.rep_cog_on(ctx):
             return
-        await ctx.channel.purge(limit=1)
         if ctx.author == member:
             msg = f'You cannot give yourself a review, {ctx.author.display_name}. *Snort!*'
             await ctx.send(embed=tools.single_embed(msg), delete_after=15)
@@ -291,10 +290,15 @@ class Rep(commands.Cog):
             self.neg.reset_cooldown(ctx)
         if not await self.rep_cog_on(ctx):
             return
-        await ctx.message.delete()
         if ctx.author == member:
             msg = f'You cannot give yourself a review, {ctx.author.display_name}. :pig: *squee!*'
             await ctx.send(embed=tools.single_embed(msg))
+            await ctx.message.delete()
+            return
+        if len(ctx.message.attachments) < 1:
+            msg = f'Your negative review is incomplete. Please attach a screenshot or picture verifying your claim.'
+            await ctx.author.send(embed=tools.single_embed(msg))
+            await ctx.message.delete()
             return
 
         if not database.in_members_table(ctx.author):
@@ -308,16 +312,15 @@ class Rep(commands.Cog):
               f'**{ctx.author.display_name}**.\n\n'\
               f'**{ctx.author.display_name}** said:\n "{message}"'
 
-        """ Figure out how to attach an image properly """
-        if len(ctx.message.attachments) > 0:
-            msg += '\n' + ctx.message.attachments[0].url
         embed = discord.Embed(color=discord.Color.red(), description=msg)
+        img = ctx.message.attachments[0].url
+        embed.set_image(url=img)
         embed.set_thumbnail(url=member.avatar_url)
-
-        # negative reviews need a place to go
         await staff_support_channel.send(embed=embed)
+
         msg = f'Your review has been submitted and forwarded to staff. Thank you.'
         await ctx.send(embed=tools.single_embed_neg(msg), delete_after=30)
+        await ctx.message.delete()
 
     @commands.command()
     @commands.has_permissions(kick_members=True)
