@@ -264,7 +264,8 @@ class Rep(commands.Cog):
             review = f'Sadly, {ctx.author.display_name} did not leave a message. :pig: *Snort!*'
         message += f'**{ctx.author.display_name}** said: \n"{review}"'
 
-        database.add_reviews_given(ctx.author)
+        for _ in range(len(members)):
+            database.add_reviews_given(ctx.author)
 
         # create embed and post it in the review channel
         embed = discord.Embed(color=discord.Color.green(), description=message)
@@ -313,8 +314,11 @@ class Rep(commands.Cog):
               f'**{ctx.author.display_name}** said:\n "{message}"'
 
         embed = discord.Embed(color=discord.Color.red(), description=msg)
-        img = ctx.message.attachments[0].url
-        embed.set_image(url=img)
+        try:
+            img = ctx.message.attachments[0].url
+            embed.set_image(url=img)
+        except IndexError:
+            pass
         embed.set_thumbnail(url=member.avatar_url)
         await staff_support_channel.send(embed=embed)
 
