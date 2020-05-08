@@ -98,15 +98,16 @@ class Karma(commands.Cog):
                 return
             if any(word in keywords for word in content):
                 if await database.karma_too_soon(message):
-                    return
-                for member in mentioned_members:
-                    if not database.in_members_table(member):
-                        database.add_member(member)
-                    database.add_karma(member, 1)
-                    database.update_karma_timer(message.author)
-                msg = f':tada: {", ".join([f"**{m.display_name}**" for m in mentioned_members])} earned 1 karma'
-                embed = discord.Embed(color=discord.Color.blue(), description=msg)
-                await message.channel.send(embed=embed)
+                    pass
+                else:
+                    for member in mentioned_members:
+                        if not database.in_members_table(member):
+                            database.add_member(member)
+                        database.add_karma(member, 1)
+                        database.update_karma_timer(message.author)
+                    msg = f':tada: {", ".join([f"**{m.display_name}**" for m in mentioned_members])} earned 1 karma'
+                    embed = discord.Embed(color=discord.Color.blue(), description=msg)
+                    await message.channel.send(embed=embed)
         except Exception as e:
             print('on message karma', e)
 
