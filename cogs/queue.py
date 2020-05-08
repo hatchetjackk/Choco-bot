@@ -75,8 +75,6 @@ class DMS(commands.Cog):
 
         host_menu = f'**Daisy-Mae Session Commands**\n\n' \
                     f'`{prefix}send` to send out codes to the next group in the queue\n' \
-                    f'`{prefix}close` to close the session off to **new** guests\n' \
-                    f'`{prefix}open` to open the session back up to **new** guests\n' \
                     f'`{prefix}end` to end the session.\n' \
                     f'`{prefix}dodo code` change your dodo `code`. ex: `{prefix}dodo ABCDEF`\n' \
                     f'`{prefix}show` to show the current queue\n' \
@@ -86,14 +84,12 @@ class DMS(commands.Cog):
                     f'`{prefix}guest_bans` show current list of banned members\n' \
                     f'`{prefix}guest_ban member` ban a `member` and prevent them from joining again \n' \
                     f'`{prefix}guest_unban member` unban a `member`\n\n' \
-                    f'`{prefix}menu` to see these options again\n' \
-                    f'`{prefix}auto num` set an auto timer that sends the next group every `num` minutes.\n'\
-                    f'`{prefix}auto stop` stop an auto timer.'
+                    f'`{prefix}menu` to see these options again\n'
 
         await dms.send(embed=tools.single_embed(host_menu, avatar=self.client.user.avatar_url))
 
     async def wizard(self, ctx, dms, session_code):
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
+        data = await tools.read_sessions()
         prefix = await self.show_prefix(ctx.guild)
         msg = '**Welcome to the Daisy-Mae Queue Wizard!**\n' \
               'If you\'d like to create a queue, please enter `y` or enter `q` to quit. You can enter `q` at any time to ' \
@@ -111,6 +107,8 @@ class DMS(commands.Cog):
                 break
             elif any(item.lower() == msg.content.lower() for item in _quit):
                 await dms.send(embed=tools.single_embed('Wizard cancelled'))
+                del data[session_code]
+                await tools.write_sessions(data)
                 await tools.close_private_channel(dms)
                 return
             else:
@@ -122,6 +120,12 @@ class DMS(commands.Cog):
         await dms.send(embed=tools.single_embed(msg))
         msg = await self.client.wait_for('message', check=check)
         dodo = msg.content
+        if dodo == 'q' or dodo == 'quit':
+            await dms.send(embed=tools.single_embed('Wizard cancelled'))
+            del data[session_code]
+            await tools.write_sessions(data)
+            await tools.close_private_channel(dms)
+            return
 
         # set turnip prices
         msg = '**Turnip Price**\nPlease enter the **Turnip sell** price on your island. Number values greater than `0` only.'
@@ -129,8 +133,11 @@ class DMS(commands.Cog):
         while True:
             while True:
                 msg = await self.client.wait_for('message', check=check)
-                if msg.content == 'q':
-                    await dms.send(embed=tools.single_embed('Quitting'))
+                if msg.content == 'q' or msg.content == 'quit':
+                    await dms.send(embed=tools.single_embed('Wizard cancelled'))
+                    del data[session_code]
+                    await tools.write_sessions(data)
+                    await tools.close_private_channel(dms)
                 try:
                     bell_value = int(msg.content)
                     if not 0 < bell_value:
@@ -150,7 +157,10 @@ class DMS(commands.Cog):
             while True:
                 msg = await self.client.wait_for('message', check=check)
                 if msg.content == 'q':
-                    await dms.send(embed=tools.single_embed('Quitting'))
+                    await dms.send(embed=tools.single_embed('Wizard cancelled'))
+                    del data[session_code]
+                    await tools.write_sessions(data)
+                    await tools.close_private_channel(dms)
                 try:
                     max_entries = int(msg.content)
                     if not 1 <= max_entries <= 100:
@@ -171,8 +181,10 @@ class DMS(commands.Cog):
             while True:
                 msg = await self.client.wait_for('message', check=check)
                 if msg.content == 'q':
-                    await dms.send(embed=tools.single_embed('Quitting'))
-                    return
+                    await dms.send(embed=tools.single_embed('Wizard cancelled'))
+                    del data[session_code]
+                    await tools.write_sessions(data)
+                    await tools.close_private_channel(dms)
                 try:
                     per_group = int(msg.content)
                     if not 1 <= per_group <= 7:
@@ -189,6 +201,11 @@ class DMS(commands.Cog):
         await dms.send(embed=tools.single_embed(msg))
         while True:
             msg = await self.client.wait_for('message', check=check)
+            if msg.content == 'q':
+                await dms.send(embed=tools.single_embed('Wizard cancelled'))
+                del data[session_code]
+                await tools.write_sessions(data)
+                await tools.close_private_channel(dms)
             if any(item.lower() == msg.content.lower() for item in _deny):
                 welcome = None
                 await dms.send(embed=tools.single_embed('Skipping Session Message.'))
@@ -212,8 +229,8 @@ class DMS(commands.Cog):
                     await dms.send(embed=tools.single_embed('Image found.'))
                     break
                 elif any(item.lower() == msg.content.lower() for item in _quit):
-                    await dms.send(embed=tools.single_embed('Quitting.'))
-                    return
+                    await dms.send(embed=tools.single_embed('Wizard cancelled'))
+                    await tools.close_private_channel(dms)
                 else:
                     await dms.send(embed=tools.single_embed('A problem occurred. Skipping image upload.'))
                     break
@@ -228,13 +245,15 @@ class DMS(commands.Cog):
         await dms.send(embed=tools.single_embed(f'__Your Info__\n{event}', avatar=self.client.user.avatar_url))
 
         # get max entries
-        msg = '**We\'re Ready!**\nWould you like to auto post this to the Sell Channel? Please enter `y` or `n`.'
+        msg = '**We\'re Ready!**\nWould you like to auto post this to the Sell Channel? Please enter `y` or `n` or `q` to quit.'
         await dms.send(embed=tools.single_embed(msg))
         session_message = None
         while True:
             msg = await self.client.wait_for('message', check=check)
             if msg.content == 'q':
                 await dms.send(embed=tools.single_embed('Quitting'))
+                del data[session_code]
+                await tools.write_sessions(data)
                 await tools.close_private_channel(dms)
             elif any(item.lower() == msg.content.lower() for item in _confirm):
 
@@ -492,8 +511,6 @@ class DMS(commands.Cog):
 
         host_menu = f'**Daisy-Mae Session Commands**\n\n' \
                     f'`{prefix}send` to send out codes to the next group in the queue\n' \
-                    f'`{prefix}close` to close the session off to **new** guests\n' \
-                    f'`{prefix}open` to open the session back up to **new** guests\n' \
                     f'`{prefix}end` to end the session.\n' \
                     f'`{prefix}dodo code` change your dodo `code`. ex: `{prefix}dodo ABCDEF`\n' \
                     f'`{prefix}show` to show the current queue\n' \
@@ -503,9 +520,7 @@ class DMS(commands.Cog):
                     f'`{prefix}guest_bans` show current list of banned members\n' \
                     f'`{prefix}guest_ban member` ban a `member` and prevent them from joining again \n' \
                     f'`{prefix}guest_unban member` unban a `member`\n\n' \
-                    f'`{prefix}menu` to see these options again\n' \
-                    f'`{prefix}auto num` set an auto timer that sends the next group every `num` minutes.\n'\
-                    f'`{prefix}auto stop` stop an auto timer.'
+                    f'`{prefix}menu` to see these options again\n'
         dms_channel = await self.get_session_channel(ctx.author)
         await dms_channel.send(embed=tools.single_embed(host_menu, avatar=self.client.user.avatar_url))
 
@@ -652,8 +667,17 @@ class DMS(commands.Cog):
             else:
                 for uid in group:
                     member = discord.utils.get(ctx.guild.members, id=uid)
-                    reviewer_rank = await tools.get_reviewer_rank(db.get_reviews_given(member))
-                    members.append(f'{member.display_name} (rank: *{reviewer_rank}*)')
+                    if member is None:
+                        data[session_code]['groups'][place].remove(uid)
+                        try:
+                            await member.send(f'You have been removed from session {session_code}')
+                            print(f'{member.display_name} removed from {session_code}')
+                        except Exception as e:
+                            print(e)
+                        continue
+                    else:
+                        reviewer_rank = await tools.get_reviewer_rank(db.get_reviews_given(member))
+                        members.append(f'{member.display_name} (rank: *{reviewer_rank}*)')
             if group is not None:
                 group = '\n'.join(members)
                 place = f'Group {place} ({len(members)}/{per_group})'
@@ -1020,6 +1044,7 @@ class DMS(commands.Cog):
                         continue
                     else:
                         reviewer_rank = await tools.get_reviewer_rank(db.get_reviews_given(member))
+
                         members.append(f'{member.display_name} (rank: *{reviewer_rank}*)')
                         # members.append(f'{member.display_name}')
             if group is not None:
