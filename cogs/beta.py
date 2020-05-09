@@ -2,6 +2,7 @@ import asyncio
 import json
 import discord
 import aiohttp
+import asyncpg
 import util.tools as tools
 import util.db as db
 from discord.ext import commands, tasks
@@ -17,7 +18,19 @@ class BetaFeatures(commands.Cog):
         self.sessions = {}
         with open('sessions/session.json', 'r') as f:
             self.sessions = json.load(f)
+        self.loop_session.start()
 
+    @commands.command(aliases=['reload-beta'])
+    @commands.is_owner()
+    async def reload_beta(self, ctx):
+        await self.write_session()
+        print('Unloading beta')
+        self.client.unload_extension('cogs.beta')
+        print('Cancelling loops')
+        self.loop_session.cancel()
+        print('Loading beta')
+        self.client.load_extension('cogs.beta')
+        await ctx.send(embed=tools.single_embed('Beta reloaded'))
 
     @commands.command()
     @commands.is_owner()
@@ -111,6 +124,32 @@ class BetaFeatures(commands.Cog):
             values = json.loads(f)
             await ctx.send(values['preview'])
 
+    @commands.command(alises=['q'])
+    async def queue(self, ctx):
+        """
+        Show a member's current queue and positions
+        :param ctx:
+        :return:
+        """
+        embed = discord.Embed(title=f'Your Current Sessions', color=discord.Color.green())
+        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar_url)
+        # embed.set_thumbnail(url=self.client.user.avatar_url)
+        found = False
+        for session, values in self.sessions.items():
+            count = 1
+            for place, group in values['groups'].items():
+                if ctx.author.id in group:
+                    found = True
+                    host = self.client.get_user(int(session))
+                    msg = f'**Position** {count}\n**Group #** {place}'
+                    embed.add_field(name=f'{host.display_name} ({session})', value=msg)
+                    count += 1
+                else:
+                    count += 1
+        if not found:
+            embed.add_field(name=f'You are not in any sessions', value='\u200b')
+        await ctx.send(embed=embed)
+
     @staticmethod
     async def create_private_channel(ctx, member):
         overwrites = {
@@ -119,8 +158,6 @@ class BetaFeatures(commands.Cog):
         }
 
         channel_name = str(member.id) + '_session'
-        # if discord.utils.get(ctx.guild.text_channels, name=channel_name) is not None:
-        #     return False
         category = discord.utils.get(ctx.guild.channels, id=697086444082298911)
         private_channel = await ctx.guild.create_text_channel(name=channel_name, overwrites=overwrites, category=category)
         msg = f'Welcome, {member.mention}! This is your private Session.'
@@ -135,13 +172,8 @@ class BetaFeatures(commands.Cog):
         :param ctx:
         :return:
         """
-        # await ctx.send(embed=tools.single_embed(f'Sorry, the this command is in closed beta at the moment.'))
 
         private_session = await self.create_private_channel(ctx, ctx.author)
-        # if not private_session:
-        #     msg = 'You already have an active Session Channel.'
-        #     await ctx.send(embed=tools.single_embed_neg(msg))
-        #     return
         msg = f'Your private Session Channel has been created: {private_session.mention}'
         notification = await ctx.send(embed=tools.single_embed(msg))
 
@@ -404,7 +436,7 @@ class BetaFeatures(commands.Cog):
         }
 
         # write to local  storage
-        await self.write_session()
+        # await self.write_session()
         await self.show_queue(host=ctx.author)
 
     async def daisymae(self, ctx, private_session, notification, prompt):
@@ -625,7 +657,7 @@ class BetaFeatures(commands.Cog):
         }
 
         # write to local  storage
-        await self.write_session()
+        # await self.write_session()
         await self.show_queue(host=ctx.author)
 
     async def other_session(self, ctx, private_session, notification, prompt):
@@ -959,7 +991,7 @@ class BetaFeatures(commands.Cog):
                                 await private_channel.send(embed=tools.single_embed_neg(msg), delete_after=5)
                                 await prompt.delete()
                                 await self.show_queue(host)
-                                await self.write_session()
+                                # await self.write_session()
                                 return
                 await prompt.delete()
 
@@ -1198,7 +1230,7 @@ class BetaFeatures(commands.Cog):
         for r in reactions:
             await queue.add_reaction(r)
 
-        await self.write_session()
+        # await self.write_session()
 
     async def pause(self, host):
         session_code = await self.get_session_code(host)
@@ -1601,6 +1633,12 @@ class BetaFeatures(commands.Cog):
                             print('More than one session found in the session file for this user', e)
                             return
                     await user.send(embed=tools.single_embed(f'Sorry, the Session you are trying to join is full.'))
+
+    @tasks.loop(seconds=30)
+    async def loop_session(self):
+        # async with self.client.pool.acquire() as con:
+        with open('sessions/session.json', 'w') as f:
+            json.dump(self.sessions, f, indent=4)
 
     async def write_session(self):
         with open('sessions/session.json', 'w') as f:
