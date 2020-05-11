@@ -22,7 +22,6 @@ class Information(commands.Cog):
         embed.add_field(name='Number of Members', value=str(ctx.guild.member_count))
         embed.set_thumbnail(url=ctx.guild.icon_url)
         await ctx.send(embed=embed)
-        print(ctx.guild.created_at)
 
     @commands.group()
     async def incident(self, ctx):
@@ -54,23 +53,6 @@ class Information(commands.Cog):
             embed = discord.Embed(title='Found Members', description=description, color=discord.Color.green())
             await ctx.send(embed=embed)
 
-    # @commands.command()
-    # async def omit(self, ctx, *criteria):
-    #     results = []
-    #     members = ctx.guild.members
-    #     for m in members:
-    #         for c in criteria:
-    #             if c not in m.display_name:
-    #                 if m not in results:
-    #                     results.append(m)
-    #     # members = [m for m in ctx.guild.members if member not in m.display_name.lower()]
-    #     description = '\n'.join([f'{m.name} / {m.display_name} ({m.id})' for m in results])
-    #     if len(description) > 2000:
-    #         await ctx.send(embed=tools.single_embed(f'Your search is too broad. Try to be more specific. Results: {len(results)}'))
-    #         return
-    #     embed = discord.Embed(title='Found Members', description=description, color=discord.Color.green())
-    #     await ctx.send(embed=embed)
-
     async def can_bypass_cooldown(self, ctx):
         if ctx.author.permissions_in(ctx.channel).administrator:
             return True
@@ -96,6 +78,14 @@ class Information(commands.Cog):
             embed.add_field(name='Roles', value=', '.join(roles))
         else:
             embed.add_field(name='Roles', value='None')
+        nicknames = db.get_member_nick_history(member)
+        nicks = [f'{n[0]}' for n in nicknames]
+        if len(nicks) > 5:
+            nicks = nicks[-5:]
+        if len(nicknames) > 0:
+            embed.add_field(name='Aliases', value=', '.join(nicks), inline=False)
+        else:
+            embed.add_field(name='Aliases', value='None', inline=False)
         embed.set_footer(text=f'Joined Discord {tools.format_date(member.joined_at)} ({joined_discord_human_readable} ago)')
         embed.set_thumbnail(url=member.avatar_url)
         await ctx.send(embed=embed)
@@ -121,6 +111,12 @@ class Information(commands.Cog):
         await ctx.author.edit(nick=' '.join([w.replace("'", "\'") for w in nickname]))
         await ctx.send(embed=tools.single_embed(msg))
         await spam.send(embed=tools.single_embed(msg))
+
+    @commands.command()
+    async def pfp(self, ctx, member: discord.Member):
+        embed = discord.Embed(title=f'{member.display_name}\'s Avatar', color=member.color)
+        embed.set_image(url=member.avatar_url)
+        await ctx.send(embed=embed)
 
     @commands.command()
     async def afk(self, ctx, *autoresponse):
