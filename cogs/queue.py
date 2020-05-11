@@ -1,428 +1,810 @@
 import asyncio
-import inspect
-
+import json
 import discord
 import util.tools as tools
 import util.db as db
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 mae_banner = 'https://i.imgur.com/HffuudZ.jpg'
 turnip = 'https://i.imgur.com/wl2MZIV.png'
 _turnip_emoji = 694822764699320411
-_confirm = ['y', 'yes']
-_deny = ['n', 'no']
-_quit = ['q', 'quit']
-
-# where to send invite information
-_dms_channel = 694015832728010762
 
 
-class DMS(commands.Cog):
+class Queue(commands.Cog):
     def __init__(self, client):
         self.client = client
+        self.sessions = {}
+        with open('sessions/sessions.json', 'r') as f:
+            self.sessions = json.load(f)
+        self.loop_session.start()
+
+    @commands.command(aliases=['reload-queue'])
+    @commands.is_owner()
+    async def reload_queue(self, ctx):
+        await self.write_session()
+        print('* Unloading queue')
+        self.client.unload_extension('cogs.queue')
+        print('* Cancelling loops')
+        self.loop_session.cancel()
+        print('* Loading queue')
+        self.client.load_extension('cogs.queue')
+        await ctx.send(embed=tools.single_embed('Queue reloaded'))
+
+    @commands.command()
+    @commands.is_owner()
+    async def supporter(self, ctx, member: discord.Member):
+        mae_supporter = ctx.guild.get_role(701854792699347065)
+        await member.add_roles(mae_supporter, reason='For donating and supporting Mae\'s ongoing development!')
+        msg = f'You\'ve been give the role **{mae_supporter.name}** for supporting {self.client.user.display_name}\'s ' \
+              f'continued development. Thank you so much! You now have access to the Mae-Supporter channel!'
+        await member.send(embed=tools.single_embed(msg, self.client.user.avatar_url))
+        await ctx.send(embed=tools.single_embed('Message sent!'))
+
+    @commands.command()
+    @commands.is_owner()
+    async def clean_session(self):
+        self.sessions = {}
+        with open('sessions/sessions.json', 'w') as f:
+            json.dump(self.sessions, f, indent=4)
+        print('sessions overwritten')
 
     @staticmethod
     async def show_prefix(guild):
         prefix = db.get_prefix(guild)[0]
         return prefix
 
-    @commands.command()
-    async def dms(self, ctx):
-        prefix = await self.show_prefix(ctx.guild)
-        host_help = f'**Getting Started with Daisy-Mae Sessions (DMS)!**\n' \
-                    f'`{prefix}create` Create a DMS\n' \
-                    f'`{prefix}menu` Get a list of available commands when hosting a DMS\n' \
-                    f'`{prefix}end` End your DMS session\n' \
-                    f'`{prefix}join session_code` Join a DMS (if the DMS is public just click the turnip reaction!)\n' \
-                    f'`{prefix}leave session_code` Leave a DMS session'
-        await ctx.send(embed=tools.single_embed(host_help))
+    async def dms_embed(self, title, description):
+        embed = discord.Embed(title=title, description=description, color=discord.Color.green())
+        embed.set_thumbnail(url=self.client.user.avatar_url)
+        return embed
 
-    @commands.command()
+    @staticmethod
+    async def in_blacklist(guild, content):
+        blacklist = db.get_blacklist(guild)
+        offending_words = [i for i in content if i in blacklist]
+        if len(offending_words) > 0:
+            return offending_words
+        else:
+            return False
+
+    @staticmethod
+    async def fetch(session, url):
+        async with session.get(url) as response:
+            return await response.text()
+
+    @commands.command(alises=['q'])
+    async def queue(self, ctx):
+        """
+        Show a member's current queue and positions
+        :param ctx:
+        :return:
+        """
+        embed = discord.Embed(title=f'Your Current Sessions', color=discord.Color.green())
+        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar_url)
+        found = False
+        for session, values in self.sessions.items():
+            count = 1
+            for place, group in values['groups'].items():
+                if ctx.author.id in group:
+                    found = True
+                    host = self.client.get_user(int(session))
+                    msg = f'**Position** {count}\n**Group #** {place}'
+                    embed.add_field(name=f'{host.display_name} ({session})', value=msg)
+                    count += 1
+                else:
+                    count += 1
+        if not found:
+            embed.add_field(name=f'You are not in any sessions', value='\u200b')
+        embed.set_footer(text='Use the leave command to exit a session.')
+        await ctx.send(embed=embed)
+
+    @staticmethod
+    async def create_private_channel(ctx, member):
+        overwrites = {
+            ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            member: discord.PermissionOverwrite(read_messages=True)
+        }
+
+        channel_name = str(member.id) + '_session'
+        category = discord.utils.get(ctx.guild.channels, id=697086444082298911)
+        private_channel = await ctx.guild.create_text_channel(name=channel_name, overwrites=overwrites, category=category)
+        msg = f'Welcome, {member.mention}! This is your private Session.'
+        await private_channel.send(embed=tools.single_embed(msg))
+        return private_channel
+
+    @commands.command(aliases=['start'])
     async def create(self, ctx):
         """
         Create a DMS session and generate the wizard
         :param ctx:
         :return:
         """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        prefix = await self.show_prefix(ctx.guild)
-        session_code = await tools.random_code()
-        dms = await tools.create_private_channel(ctx, ctx.author, session_code)
-        if not dms:
-            msg = 'You already have an active Session Channel.'
-            await ctx.send(embed=tools.single_embed_neg(msg))
-            return
-        msg = f'Your private Session Channel has been created: {dms.mention}'
+
+        private_session = await self.create_private_channel(ctx, ctx.author)
+        msg = f'Your private Session Channel has been created: {private_session.mention}'
         notification = await ctx.send(embed=tools.single_embed(msg))
 
-        data = await tools.read_sessions()
-        data[session_code] = {
-            "host": ctx.author.id,
-            "notification": [notification.id, ctx.channel.id],
-            "session": dms.id,
-            "ban list": [],
-            "message id": 0,
-            "dodo code": None,
-            "max entries": 0,
-            "members per group": 0,
-            "welcome": None,
-            "groups": {},
-            "auto": {'active': False, 'minutes': 0},
-            "closed": False
-        }
-        await tools.write_sessions(data)
-        await self.wizard(ctx, dms, session_code)
+        msg = f'**Welcome to the Daisy-Mae Queue Wizard!**\n' \
+              f':raccoon: Create Timmy/Tommy Session\n' \
+              f':pig: Create Daisy-Mae Session\n' \
+              f':star: Create Catalogue Session\n\n' \
+              f':x: Quit'
+        msg = await private_session.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
 
-        host_menu = f'**Daisy-Mae Session Commands**\n\n' \
-                    f'`{prefix}send` to send out codes to the next group in the queue\n' \
-                    f'`{prefix}end` to end the session.\n' \
-                    f'`{prefix}dodo code` change your dodo `code`. ex: `{prefix}dodo ABCDEF`\n' \
-                    f'`{prefix}show` to show the current queue\n' \
-                    f'`{prefix}notify message` send a message to everyone in your queue\n' \
-                    f'`{prefix}welcome message` set a message for your guests\n\n' \
-                    f'`{prefix}guest_kick member` to kick `member` from the queue.\n' \
-                    f'`{prefix}guest_bans` show current list of banned members\n' \
-                    f'`{prefix}guest_ban member` ban a `member` and prevent them from joining again \n' \
-                    f'`{prefix}guest_unban member` unban a `member`\n\n' \
-                    f'`{prefix}menu` to see these options again\n'
+        await msg.add_reaction('🦝')
+        await msg.add_reaction('🐷')
+        await msg.add_reaction('⭐')
+        await msg.add_reaction('❌')
+        await asyncio.sleep(0)
+        cache_msg = await private_session.fetch_message(msg.id)
 
-        await dms.send(embed=tools.single_embed(host_menu, avatar=self.client.user.avatar_url))
-
-    async def wizard(self, ctx, dms, session_code):
-        data = await tools.read_sessions()
-        prefix = await self.show_prefix(ctx.guild)
-        msg = '**Welcome to the Daisy-Mae Queue Wizard!**\n' \
-              'If you\'d like to create a queue, please enter `y` or enter `q` to quit. You can enter `q` at any time to ' \
-              'quit the wizard. Keep in mind you can only have one open session at a time, and you cannot host while ' \
-              'waiting in another Session.\n\n' \
-              f'If you experience problems, please report it using `{prefix}bug message` and attach a picture of the issue.'
-        await dms.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-
-        def check(m):
-            return m.author == ctx.message.author and m.channel == dms
+        def check(react, user):
+            return react.message.id == cache_msg.id and user.id == ctx.message.author.id
 
         while True:
-            msg = await self.client.wait_for('message', check=check)
-            if any(item.lower() == msg.content.lower() for item in _confirm):
-                break
-            elif any(item.lower() == msg.content.lower() for item in _quit):
-                await dms.send(embed=tools.single_embed('Wizard cancelled'))
-                del data[session_code]
-                await tools.write_sessions(data)
-                await tools.close_private_channel(dms)
+            reaction, member = await self.client.wait_for('reaction_add', check=check)
+            if reaction.emoji == '🦝':
+                await msg.clear_reactions()
+                await self.nook(ctx, private_session, notification, cache_msg)
+            elif reaction.emoji == '🐷':
+                await msg.clear_reactions()
+                await self.daisymae(ctx, private_session, notification, cache_msg)
+            elif reaction.emoji == '⭐':
+                await msg.clear_reactions()
+                await self.other_session(ctx, private_session, notification, cache_msg)
+            elif reaction.emoji == '❌':
+                await private_session.send(embed=tools.single_embed('Quitting'))
+                await private_session.delete()
                 return
-            else:
-                msg = 'I\'m sorry. Please answer with either `y` or `n`.'
-                await dms.send(embed=tools.single_embed_neg(msg))
+
+    async def nook(self, ctx, private_session, notification, prompt):
+        """
+        Create a nook session for turnip selling
+        :param ctx:
+        :param private_session: The host's private channel
+        :param notification: The notification message id and channel id
+        :param prompt:
+        :return:
+        """
+        def check_msg(m):
+            return m.author == ctx.message.author and m.channel == private_session
+
+        def check_react(react, user):
+            return react.message.id == prompt.id and user.id == ctx.message.author.id
 
         # get dodo code
-        msg = 'Please enter your Dodo code.'
-        await dms.send(embed=tools.single_embed(msg))
-        msg = await self.client.wait_for('message', check=check)
-        dodo = msg.content
-        if dodo == 'q' or dodo == 'quit':
-            await dms.send(embed=tools.single_embed('Wizard cancelled'))
-            del data[session_code]
-            await tools.write_sessions(data)
-            await tools.close_private_channel(dms)
-            return
+        title = 'Turnip Session'
+        embed = await self.dms_embed(title + ' (1/6)', ':exclamation: Enter your Dodo code')
+        await prompt.edit(embed=embed)
+        msg = await self.client.wait_for('message', check=check_msg)
+        dodo_code = msg.content
+        await msg.delete()
 
-        # set turnip prices
-        msg = '**Turnip Price**\nPlease enter the **Turnip sell** price on your island. Number values greater than `0` only.'
-        await dms.send(embed=tools.single_embed(msg))
+        # get nook buying price
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f':exclamation: How much are the Nooks buying for?'
+        embed = await self.dms_embed(title + ' (2/6)', description)
+        await prompt.edit(embed=embed)
         while True:
-            while True:
-                msg = await self.client.wait_for('message', check=check)
-                if msg.content == 'q' or msg.content == 'quit':
-                    await dms.send(embed=tools.single_embed('Wizard cancelled'))
-                    del data[session_code]
-                    await tools.write_sessions(data)
-                    await tools.close_private_channel(dms)
-                try:
-                    bell_value = int(msg.content)
-                    if not 0 < bell_value:
-                        msg = 'Please enter a valid positive integer.'
-                        await dms.send(embed=tools.single_embed_neg(msg))
-                    else:
-                        break
-                except ValueError:
-                    msg = 'Please enter a valid integer.'
-                    await dms.send(embed=tools.single_embed_neg(msg))
-            break
+            msg = await self.client.wait_for('message', check=check_msg)
+            try:
+                turnip_price = int(msg.content)
+                break
+            except ValueError:
+                await msg.delete()
+                description = f'Dodo Code: `{dodo_code}`\n' \
+                              f':exclamation: How much are the Nooks buying for?\n' \
+                              f':exclamation: Positive integers only'
+                embed = await self.dms_embed(title + ' (2/6)', description)
+                await prompt.edit(embed=embed)
+        await msg.delete()
 
-        # get max entries
-        msg = '**How Many Groups?**\nPlease enter the maximum number of groups you will accept between `1` and `100`.'
-        await dms.send(embed=tools.single_embed(msg))
+        # get max groups
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Turnip Price: `{turnip_price}` bells\n' \
+                      f':exclamation: How many groups will you allow? (max 20)'
+        embed = await self.dms_embed(title + ' (3/6)', description)
+        await prompt.edit(embed=embed)
         while True:
-            while True:
-                msg = await self.client.wait_for('message', check=check)
-                if msg.content == 'q':
-                    await dms.send(embed=tools.single_embed('Wizard cancelled'))
-                    del data[session_code]
-                    await tools.write_sessions(data)
-                    await tools.close_private_channel(dms)
-                try:
-                    max_entries = int(msg.content)
-                    if not 1 <= max_entries <= 100:
-                        msg = 'Please enter a number between `1` and `100`.'
-                        await dms.send(embed=tools.single_embed_neg(msg))
-                    else:
-                        break
-                except ValueError:
-                    msg = 'Please enter a valid integer.'
-                    await dms.send(embed=tools.single_embed_neg(msg))
-            break
-
-        # entries per group
-        msg = '**Players per Group**\nPlease enter the maximum number of entries per group between `1` and `7`. ' \
-              'This can help you manage how many players are on your island at any given time.'
-        await dms.send(embed=tools.single_embed(msg))
-        while True:
-            while True:
-                msg = await self.client.wait_for('message', check=check)
-                if msg.content == 'q':
-                    await dms.send(embed=tools.single_embed('Wizard cancelled'))
-                    del data[session_code]
-                    await tools.write_sessions(data)
-                    await tools.close_private_channel(dms)
-                try:
-                    per_group = int(msg.content)
-                    if not 1 <= per_group <= 7:
-                        await dms.send(embed=tools.single_embed_neg('Please enter a number between `1` and `7`.'))
-                    else:
-                        break
-                except ValueError:
-                    await dms.send(embed=tools.single_embed_neg('Please enter a valid integer.'))
-            break
-
-        # set message
-        msg = '**Session Post Message**\nYou can post an optional message with your Session to give your guests ' \
-              'additional details about your Session. Enter `n` to skip.'
-        await dms.send(embed=tools.single_embed(msg))
-        while True:
-            msg = await self.client.wait_for('message', check=check)
-            if msg.content == 'q':
-                await dms.send(embed=tools.single_embed('Wizard cancelled'))
-                del data[session_code]
-                await tools.write_sessions(data)
-                await tools.close_private_channel(dms)
-            if any(item.lower() == msg.content.lower() for item in _deny):
-                welcome = None
-                await dms.send(embed=tools.single_embed('Skipping Session Message.'))
-            else:
-                welcome = msg.content
-            break
-
-        # get image
-        msg = '**Upload Image**\nWe encourage hosts to post images of their turnip sell price. You can upload your ' \
-              'picture now or enter `n` to pass.'
-        await dms.send(embed=tools.single_embed(msg))
-        img = None
-        while True:
-            while True:
-                msg = await self.client.wait_for('message', check=check)
-                if any(item.lower() == msg.content.lower() for item in _deny):
-                    await dms.send(embed=tools.single_embed('Skipping image upload.'))
+            msg = await self.client.wait_for('message', check=check_msg)
+            try:
+                if 1 <= int(msg.content) <= 20:
+                    max_groups = int(msg.content)
                     break
-                elif len(msg.attachments) > 0:
-                    img = msg.attachments[0]
-                    await dms.send(embed=tools.single_embed('Image found.'))
-                    break
-                elif any(item.lower() == msg.content.lower() for item in _quit):
-                    await dms.send(embed=tools.single_embed('Wizard cancelled'))
-                    await tools.close_private_channel(dms)
                 else:
-                    await dms.send(embed=tools.single_embed('A problem occurred. Skipping image upload.'))
-                    break
-            break
+                    await msg.delete()
+                    description = f'Dodo Code: `{dodo_code}`\n' \
+                                  f'Turnip Price: `{turnip_price}` bells\n' \
+                                  f':exclamation: How many groups will you allow? (max 20)\n' \
+                                  f':exclamation: Enter positive integers only between 1 and 20.'
+                    embed = await self.dms_embed(title + ' (3/6)', description)
+                    await prompt.edit(embed=embed)
+            except ValueError:
+                await msg.delete()
+                description = f'Dodo Code: `{dodo_code}`\n' \
+                              f'Turnip Price: `{turnip_price}` bells\n' \
+                              f':exclamation: How many groups will you allow? (max 20)\n' \
+                              f':exclamation: Enter positive integers only between 1 and 20.'
+                embed = await self.dms_embed(title + ' (3/6)', description)
+                await prompt.edit(embed=embed)
+        await msg.delete()
 
-        event = f'**Bell Price**: {bell_value}\n'\
-                f'**Groups**: {max_entries}\n' \
-                f'**Players per Group**: {per_group}\n'
-        if welcome is not None:
-            event += '\n' + f'**Message from the Host**: {welcome}'
-
-        await dms.send(embed=tools.single_embed(f'__Your Info__\n{event}', avatar=self.client.user.avatar_url))
-
-        # get max entries
-        msg = '**We\'re Ready!**\nWould you like to auto post this to the Sell Channel? Please enter `y` or `n` or `q` to quit.'
-        await dms.send(embed=tools.single_embed(msg))
-        session_message = None
+        # get guests per group
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Turnip Price: `{turnip_price}` bells\n' \
+                      f'Max Groups: `{max_groups}`\n' \
+                      f':exclamation: How many guests per group? (max 7)'
+        embed = await self.dms_embed(title + ' (4/6)', description)
+        await prompt.edit(embed=embed)
         while True:
-            msg = await self.client.wait_for('message', check=check)
-            if msg.content == 'q':
-                await dms.send(embed=tools.single_embed('Quitting'))
-                del data[session_code]
-                await tools.write_sessions(data)
-                await tools.close_private_channel(dms)
-            elif any(item.lower() == msg.content.lower() for item in _confirm):
+            msg = await self.client.wait_for('message', check=check_msg)
+            try:
+                if 1 <= int(msg.content) <= 7:
+                    per_group = int(msg.content)
+                    await msg.delete()
+                    break
+                else:
+                    await msg.delete()
+                    description = f'Dodo Code: `{dodo_code}`\n' \
+                                  f'Turnip Price: `{turnip_price}` bells\n' \
+                                  f'Max Groups: `{max_groups}`\n' \
+                                  f':exclamation: How many guests per group? (max 7)' \
+                                  f':exclamation: Enter positive integers only between 1 and 7.'
+                    embed = await self.dms_embed(title + ' (3/6)', description)
+                    await prompt.edit(embed=embed)
+            except ValueError:
+                await msg.delete()
+                description = f'Dodo Code: `{dodo_code}`\n' \
+                              f'Turnip Price: `{turnip_price}` bells\n' \
+                              f'Max Groups: `{max_groups}`\n' \
+                              f':exclamation: How many guests per group? (max 7)' \
+                              f':exclamation: Enter positive integers only between 1 and 7.'
+                embed = await self.dms_embed(title + ' (3/6)', description)
+                await prompt.edit(embed=embed)
 
-                # generate the invite session embed
-                notification_channel = self.client.get_channel(_dms_channel)
-                embed = discord.Embed(color=discord.Color.green(),
-                                      description=f'**{ctx.author.display_name}** has created a new Daisy-Mae session!\n'
-                                                  f'To join just tap the `turnip` reaction\n\n{event}')
-                if img is not None:
-                    embed.set_image(url=img.url)
-                embed.set_thumbnail(url=turnip)
-                session_message = await notification_channel.send(embed=embed)
-                await session_message.add_reaction(self.client.get_emoji(694822764699320411))
-
-                session_message = session_message.id
-                msg = f'Your Session invite has been sent to {notification_channel.mention}!'
-                await dms.send(embed=tools.single_embed(msg))
-                break
-            elif any(item.lower() == msg.content.lower() for item in _deny):
-                msg = f'OK! Your session is still open and your code is valid until you close the session.\n' \
-                      f'You can invite guests to join with `{prefix}join {session_code}`.'
-                await dms.send(embed=tools.single_embed(msg))
+        # get session instructions
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Turnip Price: `{turnip_price}` bells\n' \
+                      f'Max Groups: `{max_groups}`\n' \
+                      f'Guests per Group: `{per_group}`\n' \
+                      f':exclamation: Please enter a session message. Use this to give instructions to ' \
+                      f'your guests.'
+        embed = await self.dms_embed(title + ' (5/6)', description)
+        await prompt.edit(embed=embed)
+        while True:
+            msg = await self.client.wait_for('message', check=check_msg)
+            if len(msg.content) > 0:
+                session_message = msg.content
+                await msg.delete()
                 break
             else:
-                msg = 'I\'m sorry. Please answer with either `y` or `n`.'
-                await dms.send(embed=tools.single_embed_neg(msg))
-        msg = f'You can add a `welcome` message for guests by using the '\
-              f'`{prefix}welcome message` command. This way you can let them know if they ' \
-              f'should leave via the airport or wait to get kicked!'
-        await dms.send(embed=tools.single_embed(msg))
+                await msg.delete()
+                description = f'Dodo Code: `{dodo_code}`\n' \
+                              f'Turnip Price: `{turnip_price}` bells\n' \
+                              f'Max Groups: `{max_groups}`\n' \
+                              f'Guests per Group: `{per_group}`\n' \
+                              f':exclamation: Please enter a session message. Use this to give instructions to ' \
+                              f'your guests.\n' \
+                              f':exclamation: Session messages cannot be empty.'
+                embed = await self.dms_embed(title + ' (5/6)', description)
+                await prompt.edit(embed=embed)
 
-        data = await tools.read_sessions()
+        # grab an image
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Turnip Price: `{turnip_price}` bells\n' \
+                      f'Max Groups: `{max_groups}`\n' \
+                      f'Guests per Group: `{per_group}`\n' \
+                      f'Session Message: `{session_message}`\n' \
+                      f':exclamation: Please attach a picture of your Turnip sale price.'
+        embed = await self.dms_embed(title + ' (6/6)', description)
+        await prompt.edit(embed=embed)
+        while True:
+            img_msg = await self.client.wait_for('message', check=check_msg)
+            if len(img_msg.attachments) > 0:
+                img = img_msg.attachments[0]
+                break
+            else:
+                await img_msg.delete()
+                description = f'Dodo Code: `{dodo_code}`\n' \
+                              f'Turnip Price: `{turnip_price}` bells\n' \
+                              f'Max Groups: `{max_groups}`\n' \
+                              f'Guests per Group: `{per_group}`\n' \
+                              f'Session Message: `{session_message}`\n' \
+                              f':exclamation: Please attach a picture of your Turnip sale price.\n' \
+                              f':exclamation: Images only, please.'
+                embed = await self.dms_embed(title + ' (6/6)', description)
+                await prompt.edit(embed=embed)
 
-        # create groups based on num of users
+        # prompt to post
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Turnip Price: {turnip_price}\n' \
+                      f'Max Groups: {max_groups}\n' \
+                      f'Guests per Group: {per_group}\n' \
+                      f'Session Message: {session_message}\n' \
+                      f'Image attached.\n' \
+                      f':exclamation: Your session is ready! Click ✅ to post it or ❌ to cancel.'
+        embed = await self.dms_embed(title, description)
+        embed.set_image(url=img.url)
+        await prompt.edit(embed=embed)
+        await prompt.add_reaction('✅')
+        await prompt.add_reaction('❌')
+        await asyncio.sleep(0)
+
+        # sell channel usually timmy sell
+        sell_channel = self.client.get_channel(694015832728010762)
+        reaction, member = await self.client.wait_for('reaction_add', check=check_react)
+        await asyncio.sleep(0)
+        while True:
+            if reaction.emoji == '✅':
+                msg = f'**{ctx.author.display_name}** has created a new **Turnip Session**!\n' \
+                      f'Tap :raccoon: to join!\n' \
+                      f'**Groups**: {max_groups}\n' \
+                      f'**Players per Group**: {per_group}\n\n' \
+                      f'**Message from the Host**: {session_message}'
+                embed = discord.Embed(
+                    title=f'**Turnip Sell Price**: {turnip_price} bells!',
+                    color=discord.Color.green(),
+                    description=msg)
+                embed.set_thumbnail(url=ctx.author.avatar_url)
+                embed.set_image(url=img.url)
+                posting = await sell_channel.send(embed=embed)
+                await posting.add_reaction('🦝')
+
+                msg = f'Your session has been posted to {sell_channel.mention}'
+                await private_session.send(embed=tools.single_embed(msg))
+                await img_msg.delete()
+                break
+            elif reaction.emoji == '❌':
+                await private_session.send(embed=tools.single_embed('Quitting'))
+                await private_session.delete()
+                return
+
+        # write data
         groups = {}
-
-        for i in range(max_entries):
+        for i in range(max_groups):
             groups[i + 1] = []
-
-        new_data = {
-            "message id": session_message,
-            "dodo code": dodo.upper(),
-            "max entries": max_entries,
-            "members per group": per_group,
-            "welcome": welcome,
+        self.sessions[ctx.author.id] = {
+            "type": "nook",
+            "session_notification": {
+                "id": notification.id,
+                "channel": notification.channel.id
+            },
+            "private_session": private_session.id,
+            "ban_list": [],
+            "message_id": posting.id,
+            "queue_id": None,
+            "dodo_code": dodo_code,
+            "max_groups": max_groups,
+            "members_per": per_group,
             "groups": groups,
+            "on_island": [],
+            "history": [],
+            "open": True
         }
 
-        for k, v in new_data.items():
-            data[session_code][k] = v
+        # write to local  storage
+        # await self.write_session()
+        await self.show_queue(host=ctx.author)
 
-        await tools.write_sessions(data)
-        return session_code
+    async def daisymae(self, ctx, private_session, notification, prompt):
+        def check_msg(m):
+            return m.author == ctx.message.author and m.channel == private_session
 
-    @commands.command(aliases=['open'])
-    async def _open(self, ctx):
-        """
-        Open a closed session
-        :param ctx:
-        :return:
-        """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        if not await self.is_host(ctx.author):
-            msg = f'You cannot run this command if you are not hosting a Session.'
-            await ctx.send(embed=tools.single_embed_neg(msg))
-            return
+        def check_react(react, user):
+            return react.message.id == prompt.id and user.id == ctx.message.author.id
 
-        data = await tools.read_sessions()
-        session_code = await self.get_session_code(ctx.author)
-        notification = data[session_code]['notification']
-        data[session_code]['closed'] = False
-        await tools.write_sessions(data)
+        title = 'Daisy-Mae Session'
+        embed = await self.dms_embed(title + ' (1/6)', ':exclamation: Enter your Dodo code')
+        await prompt.edit(embed=embed)
+        msg = await self.client.wait_for('message', check=check_msg)
+        dodo_code = msg.content
+        await msg.delete()
 
-        channel = self.client.get_channel(data[session_code]['session'])
-        await channel.send(embed=tools.single_embed(f'Your session has been **reopened** to new guests.'))
-        msg = f'Private Session **closed**.'
-        await tools.edit_msg(self.client.get_channel(notification[1]), notification[0], msg)
+        # get sale price
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f':exclamation: How much is Daisy selling for?'
+        embed = await self.dms_embed(title + ' (2/6)', description)
+        await prompt.edit(embed=embed)
+        while True:
+            msg = await self.client.wait_for('message', check=check_msg)
+            try:
+                turnip_price = int(msg.content)
+                await msg.delete()
+                break
+            except ValueError:
+                await msg.delete()
+                description = f'Dodo Code: `{dodo_code}`\n' \
+                              f':exclamation: How much is Daisy selling for\n' \
+                              f':exclamation: Positive integers only'
+                embed = await self.dms_embed(title + ' (2/6)', description)
+                await prompt.edit(embed=embed)
+            await msg.delete()
 
-        # edit sell embed if available
-        msg = f'Session **{session_code}** has **reopened**.'
-        await tools.edit_msg(self.client.get_channel(_dms_channel), data[session_code]['message id'], msg)
+        # get max groups
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Daisey-Mae Price: `{turnip_price}` bells\n' \
+                      f':exclamation: How many groups will you allow? (max 20)'
+        embed = await self.dms_embed(title + ' (3/6)', description)
+        await prompt.edit(embed=embed)
+        while True:
+            msg = await self.client.wait_for('message', check=check_msg)
+            try:
+                if 1 <= int(msg.content) <= 20:
+                    max_groups = int(msg.content)
+                    await msg.delete()
+                    break
+                else:
+                    await msg.delete()
+                    description = f'Dodo Code: `{dodo_code}`\n' \
+                                  f'Daisey-Mae Price: `{turnip_price}` bells\n' \
+                                  f':exclamation: How many groups will you allow? (max 20)\n' \
+                                  f':exclamation: Enter positive integers only between 1 and 20.'
+                    embed = await self.dms_embed(title + ' (3/6)', description)
+                    await prompt.edit(embed=embed)
+            except ValueError:
+                await msg.delete()
+                description = f'Dodo Code: `{dodo_code}`\n' \
+                              f'Daisey-Mae Price: `{turnip_price}` bells\n' \
+                              f':exclamation: How many groups will you allow? (max 20)\n' \
+                              f':exclamation: Enter positive integers only between 1 and 20.'
+                embed = await self.dms_embed(title + ' (3/6)', description)
+                await prompt.edit(embed=embed)
+        # await msg.delete()
 
-    @commands.command()
-    @commands.has_permissions(manage_channels=True)
-    async def admin_end(self, ctx, session_code):
-        """
-        Close a session and prevent guests from joining
-        :param ctx:
-        :param session_code:
-        :return:
-        """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        data = await tools.read_sessions()
-        try:
-            data[session_code]
-        except KeyError:
-            await ctx.send(embed=tools.single_embed(f'That session does not exist.'))
-            return
+        # guests per group
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Daisey-Mae Price: `{turnip_price}` bells\n' \
+                      f'Max Groups: `{max_groups}`\n' \
+                      f':exclamation: How many guests per group? (max 7)'
+        embed = await self.dms_embed(title + ' (4/6)', description)
+        await prompt.edit(embed=embed)
+        while True:
+            msg = await self.client.wait_for('message', check=check_msg)
+            try:
+                if 1 <= int(msg.content) <= 7:
+                    per_group = int(msg.content)
+                    await msg.delete()
+                    break
+                else:
+                    await msg.delete()
+                    description = f'Dodo Code: `{dodo_code}`\n' \
+                                  f'Daisey-Mae Price: `{turnip_price}` bells\n' \
+                                  f'Max Groups: `{max_groups}`\n' \
+                                  f':exclamation: How many guests per group? (max 7)\n' \
+                                  f':exclamation: Enter positive integers only between 1 and 7.'
+                    embed = await self.dms_embed(title + ' (4/6)', description)
+                    await prompt.edit(embed=embed)
+            except ValueError:
+                await msg.delete()
+                description = f'Dodo Code: `{dodo_code}`\n' \
+                              f'Daisey-Mae Price: `{turnip_price}` bells\n' \
+                              f'Max Groups: `{max_groups}`\n' \
+                              f':exclamation: How many guests per group? (max 7)\n' \
+                              f':exclamation: Enter positive integers only between 1 and 7.'
+                embed = await self.dms_embed(title + ' (4/6)', description)
+                await prompt.edit(embed=embed)
 
-        notification = data[session_code]['notification']
-        data[session_code]['closed'] = True
-        await tools.write_sessions(data)
+        # get session instructions
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Daisey-Mae Price: `{turnip_price}` bells\n' \
+                      f'Max Groups: `{max_groups}`\n' \
+                      f'Guests per Group: `{per_group}`\n' \
+                      f':exclamation: Please enter a session message. Use this to give instructions to ' \
+                      f'your guests.'
+        embed = await self.dms_embed(title + ' (5/6)', description)
+        await prompt.edit(embed=embed)
+        while True:
+            msg = await self.client.wait_for('message', check=check_msg)
+            if len(msg.content) > 0:
+                session_message = msg.content
+                await msg.delete()
+                break
+            else:
+                await msg.delete()
+                description = f'Dodo Code: `{dodo_code}`\n' \
+                              f'Daisey-Mae Price: `{turnip_price}` bells\n' \
+                              f'Max Groups: `{max_groups}`\n' \
+                              f'Guests per Group: `{per_group}`\n' \
+                              f':exclamation: Please enter a session message. Use this to give instructions to ' \
+                              f'your guests.\n' \
+                              f':exclamation: Session messages cannot be empty.'
+                embed = await self.dms_embed(title + ' (5/6)', description)
+                await prompt.edit(embed=embed)
 
-        channel = self.client.get_channel(data[session_code]['session'])
-        await tools.close_private_channel(channel)
-        msg = f'Private Session **ended**.'
-        await tools.edit_msg(self.client.get_channel(notification[1]), notification[0], msg)
+        # grab an image
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Daisey-Mae Price: `{turnip_price}` bells\n' \
+                      f'Max Groups: `{max_groups}`\n' \
+                      f'Guests per Group: `{per_group}`\n' \
+                      f'Session Message: `{session_message}`\n' \
+                      f':exclamation: Please attach a picture of your Daisy-Mae sale price.'
+        embed = await self.dms_embed(title + ' (6/6)', description)
+        await prompt.edit(embed=embed)
+        while True:
+            img_msg = await self.client.wait_for('message', check=check_msg)
+            if len(img_msg.attachments) > 0:
+                img = img_msg.attachments[0]
+                break
+            else:
+                await img_msg.delete()
+                description = f'Dodo Code: `{dodo_code}`\n' \
+                              f'Daisey-Mae Price: `{turnip_price}` bells\n' \
+                              f'Max Groups: `{max_groups}`\n' \
+                              f'Guests per Group: `{per_group}`\n' \
+                              f'Session Message: `{session_message}`\n' \
+                              f':exclamation: Please attach a picture of your Daisy-Mae sale price.\n' \
+                              f':exclamation: Images only, please.'
+                embed = await self.dms_embed(title + ' (6/6)', description)
+                await prompt.edit(embed=embed)
 
-        # edit sell embed if available
-        try:
-            msg = f'Session **{session_code}** has **ended**.'
-            await tools.edit_msg(self.client.get_channel(_dms_channel), data[session_code]['message id'], msg)
-        except Exception as e:
-            print(e, ' ending session ' + session_code)
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Turnip Price: {turnip_price}\n' \
+                      f'Max Groups: {max_groups}\n' \
+                      f'Guests per Group: {per_group}\n' \
+                      f'Session Message: {session_message}\n' \
+                      f'Image attached.\n' \
+                      f':exclamation: Your session is ready! Click ✅ to post it.'
+        embed = await self.dms_embed(title, description)
+        embed.set_image(url=img.url)
+        await prompt.edit(embed=embed)
+        await prompt.add_reaction('✅')
+        await prompt.add_reaction('❌')
+        await asyncio.sleep(0)
 
-        del data[session_code]
-        await tools.write_sessions(data)
+        # daisy channel
+        sell_channel = self.client.get_channel(694015696241164368)
+        reaction, member = await self.client.wait_for('reaction_add', check=check_react)
+        await asyncio.sleep(0)
+        while True:
+            if reaction.emoji == '✅':
+                msg = f'**{ctx.author.display_name}** has created a new **Daisy-Mae Session**!\n' \
+                      f'Tap :pig: to join!\n' \
+                      f'**Groups**: {max_groups}\n' \
+                      f'**Players per Group**: {per_group}\n\n' \
+                      f'**Message from the Host**: {session_message}'
+                embed = discord.Embed(title=f'**Turnip Buy Price**: {turnip_price} bells!',
+                                      color=discord.Color.green(), description=msg)
+                # embed.set_thumbnail(url=self.client.user.avatar_url)
+                embed.set_thumbnail(url=ctx.author.avatar_url)
+                embed.set_image(url=img.url)
+                posting = await sell_channel.send(embed=embed)
+                await posting.add_reaction('🐷')
+                await img_msg.delete()
 
-    @commands.command()
-    async def close(self, ctx):
-        """
-        Close a session and prevent guests from joining
-        :param ctx:
-        :return:
-        """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
+                msg = f'Your session has been posted to {sell_channel.mention}'
+                await private_session.send(embed=tools.single_embed(msg))
+                break
+            elif reaction.emoji == '❌':
+                await private_session.send(embed=tools.single_embed('Quitting'))
+                await private_session.delete()
+                return
 
-        data = await tools.read_sessions()
-        session_code = await self.get_session_code(ctx.author)
-        notification = data[session_code]['notification']
-        data[session_code]['closed'] = True
-        await tools.write_sessions(data)
+        # write data
+        groups = {}
+        for i in range(max_groups):
+            groups[i + 1] = []
+        self.sessions[ctx.author.id] = {
+            "type": "daisy",
+            "session_notification": {
+                "id": notification.id,
+                "channel": notification.channel.id
+            },
+            "private_session": private_session.id,
+            "ban_list": [],
+            "message_id": posting.id,
+            "queue_id": None,
+            "dodo_code": dodo_code,
+            "max_groups": max_groups,
+            "members_per": per_group,
+            "welcome": None,
+            "groups": groups,
+            "on_island": [],
+            "history": [],
+            "open": True
+        }
 
-        channel = self.client.get_channel(data[session_code]['session'])
-        await channel.send(embed=tools.single_embed(f'Your session has been **closed** to new guests.'))
-        msg = f'Private Session **closed**.'
-        await tools.edit_msg(self.client.get_channel(notification[1]), notification[0], msg)
+        # write to local  storage
+        # await self.write_session()
+        await self.show_queue(host=ctx.author)
 
-        # edit sell embed if available
-        msg = f'Session **{session_code}** is currently **closed**.'
-        await tools.edit_msg(self.client.get_channel(_dms_channel), data[session_code]['message id'], msg)
+    async def other_session(self, ctx, private_session, notification, prompt):
+        def check_msg(m):
+            return m.author == ctx.message.author and m.channel == private_session
 
-    @commands.command()
-    async def end(self, ctx):
+        def check_react(react, user):
+            return react.message.id == prompt.id and user.id == ctx.message.author.id
+
+        title = 'Catalogue'
+        embed = await self.dms_embed(title + ' (1/6)', ':exclamation: Enter your Dodo code')
+        await prompt.edit(embed=embed)
+        msg = await self.client.wait_for('message', check=check_msg)
+        dodo_code = msg.content
+        await msg.delete()
+
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f':exclamation: Enter a #channel where your session will be posted.'
+        embed = await self.dms_embed(title + ' (2/6)', description)
+        await prompt.edit(embed=embed)
+        while True:
+            msg = await self.client.wait_for('message', check=check_msg)
+            if len(msg.channel_mentions) > 0:
+                posting_channel = msg.channel_mentions[0]
+                if posting_channel.permissions_for(ctx.author).read_messages is True:
+                    await msg.delete()
+                    break
+                else:
+                    await msg.delete()
+                    msg = f'You do not have permission to post in that channel'
+                    await private_session.send(embed=tools.single_embed(msg), delete_after=3)
+            else:
+                await msg.delete()
+                msg = f'Please enter a valid channel mention.'
+                await private_session.send(embed=tools.single_embed(msg), delete_after=3)
+
+        description = f'Dodo Code: `{dodo_code}`\nSession Type: `{title}`\n' \
+                      f'Channel: {posting_channel.mention}\n' \
+                      f':exclamation: How many groups will you allow? (max 20)'
+        embed = await self.dms_embed(title + ' (3/6)', description)
+        await prompt.edit(embed=embed)
+        while True:
+            msg = await self.client.wait_for('message', check=check_msg)
+            try:
+                if 1 <= int(msg.content) <= 20:
+                    max_groups = int(msg.content)
+                    await msg.delete()
+                    break
+                else:
+                    await msg.delete()
+                    msg = 'Enter positive integers only between 1 and 20.'
+                    await private_session.send(embed=tools.single_embed(msg), delete_after=5)
+            except ValueError:
+                await msg.delete()
+                msg = 'Enter positive integers only between 1 and 20.'
+                await private_session.send(embed=tools.single_embed(msg), delete_after=5)
+
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Session Type: `{title}`\n' \
+                      f'Channel: {posting_channel.mention}\n' \
+                      f'Max Groups: `{max_groups}`\n' \
+                      f':exclamation: How many guests per group? (max 7)'
+        embed = await self.dms_embed(title + ' (4/6)', description)
+        await prompt.edit(embed=embed)
+        while True:
+            msg = await self.client.wait_for('message', check=check_msg)
+            try:
+                if 1 <= int(msg.content) <= 7:
+                    per_group = int(msg.content)
+                    await msg.delete()
+                    break
+                else:
+                    await msg.delete()
+                    msg = 'Enter positive integers only between 1 and 7.'
+                    await private_session.send(embed=tools.single_embed(msg), delete_after=5)
+            except ValueError:
+                await msg.delete()
+                msg = 'Enter positive integers only between 1 and 7.'
+                await private_session.send(embed=tools.single_embed(msg), delete_after=5)
+
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Session Type: `{title}`\n' \
+                      f'Channel: {posting_channel.mention}\n' \
+                      f'Max Groups: `{max_groups}`\n' \
+                      f'Guests per Group: `{per_group}`\n' \
+                      f':exclamation: Please enter a session message. Use this to give instructions to ' \
+                      f'your guests. For catalogue sessions, this message is very important. Please be clear!'
+        embed = await self.dms_embed(title + ' (5/6)', description)
+        await prompt.edit(embed=embed)
+        msg = await self.client.wait_for('message', check=check_msg)
+        session_message = msg.content
+        await msg.delete()
+
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Session Type: `{title}`\n' \
+                      f'Channel: {posting_channel.mention}\n' \
+                      f'Max Groups: `{max_groups}`\n' \
+                      f'Guests per Group: `{per_group}`\n' \
+                      f'Session Message: {session_message}\n' \
+                      f':exclamation: Please attach a picture for your session.'
+        embed = await self.dms_embed(title + ' (6/6)', description)
+        await prompt.edit(embed=embed)
+        while True:
+            img_msg = await self.client.wait_for('message', check=check_msg)
+            if len(img_msg.attachments) > 0:
+                img = img_msg.attachments[0]
+                break
+            else:
+                await img_msg.delete()
+                await private_session.send(embed=tools.single_embed_neg('Please upload an image'), delete_after=5)
+
+        description = f'Dodo Code: `{dodo_code}`\n' \
+                      f'Session Type: `{title}`\n' \
+                      f'Channel: {posting_channel.mention}\n' \
+                      f'Max Groups: `{max_groups}`\n' \
+                      f'Guests per Group: `{per_group}`\n' \
+                      f'Session Message: {session_message}\n' \
+                      f'Image attached.\n' \
+                      f':exclamation: Your session is ready! Click ✅ to post it.'
+        embed = await self.dms_embed(title, description)
+        embed.set_image(url=img.url)
+        await prompt.edit(embed=embed)
+        await prompt.add_reaction('✅')
+        await prompt.add_reaction('❌')
+        await asyncio.sleep(0)
+
+        # sell channel
+        sell_channel = self.client.get_channel(posting_channel.id)
+        reaction, member = await self.client.wait_for('reaction_add', check=check_react)
+        await asyncio.sleep(0)
+        while True:
+            if reaction.emoji == '✅':
+                msg = f'**{ctx.author.display_name}** has created a new **Catalogue** session!\n' \
+                      f'Tap :star: to join!\n\n' \
+                      f'**Groups**: {max_groups}\n' \
+                      f'**Players per Group**: {per_group}\n\n' \
+                      f'**Message from the Host**: {session_message}'
+                embed = discord.Embed(color=discord.Color.green(), description=msg)
+                embed.set_thumbnail(url=ctx.author.avatar_url)
+                embed.set_image(url=img.url)
+                posting = await sell_channel.send(embed=embed)
+                await posting.add_reaction('⭐')
+                await img_msg.delete()
+
+                msg = f'Your session has been posted to {sell_channel.mention}'
+                await private_session.send(embed=tools.single_embed(msg))
+                break
+            elif reaction.emoji == '❌':
+                await private_session.send(embed=tools.single_embed('Quitting'))
+                await private_session.delete()
+                return
+
+        # write data
+        groups = {}
+        for i in range(max_groups):
+            groups[i + 1] = []
+        self.sessions[ctx.author.id] = {
+            "type": "other",
+            "session_notification": {
+                "id": notification.id,
+                "channel": notification.channel.id
+            },
+            "private_session": private_session.id,
+            "ban_list": [],
+            "message_id": posting.id,
+            "sell_channel": sell_channel.id,
+            "queue_id": None,
+            "dodo_code": dodo_code,
+            "max_groups": max_groups,
+            "members_per": per_group,
+            "welcome": None,
+            "groups": groups,
+            "on_island": [],
+            "history": [],
+            "open": True
+        }
+
+        await self.show_queue(host=ctx.author)
+
+    async def end(self, host):
         """
         End a session
-        :param ctx:
+        :param host: member object
         :return:
         """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
-        data = await tools.read_sessions()
-
-        session_to_close = []
-        for session_code, value in data.items():
-            if value['host'] == ctx.author.id:
-                session_to_close.append(session_code)
-                channel = self.client.get_channel(value['session'])
+        post_chans = {
+            'nook': 694015832728010762,
+            'daisy': 694015696241164368
+            }
+        session_to_close = None
+        for session_code, value in self.sessions.items():
+            if int(session_code) == host.id:
+                session_to_close = session_code
+                channel = self.client.get_channel(value['private_session'])
 
                 # edit private session notification if available
                 msg = f'Private Session **closed**.'
                 await tools.edit_msg(
-                    self.client.get_channel(value['notification'][1]),
-                    value['notification'][0],
+                    self.client.get_channel(value['session_notification']['channel']),
+                    value['session_notification']['id'],
                     msg, delete_after=30
                 )
                 if channel is not None:
@@ -431,627 +813,600 @@ class DMS(commands.Cog):
                 # edit sell embed if available
                 try:
                     msg = f'Session **{session_code}** has **ended**.'
+                    if self.sessions[session_code]['type'] == 'other':
+                        sell_channel = self.sessions[session_code]['sell_channel']
+                    else:
+                        sell_channel = post_chans.get(self.sessions[session_code]['type'])
                     await tools.edit_msg(
-                        self.client.get_channel(_dms_channel),
-                        value['message id'],
+                        self.client.get_channel(sell_channel),
+                        value['message_id'],
                         msg, delete_after=30
                     )
-                except KeyError:
+                except KeyError as e:
+                    print(e)
                     pass
 
-                try:
-                    groups = data[session_code]['groups']
-                    for place, member_list in groups.items():
-                        for uid in member_list:
-                            member = self.client.get_user(uid)
+                groups = self.sessions[session_code]['groups']
+                for place, member_list in groups.items():
+                    for uid in member_list:
+                        member = self.client.get_user(int(uid))
+                        if member is None:
+                            continue
+                        try:
                             msg = f'Session **{session_code}** was **ended** by the host.'
                             await member.send(embed=tools.single_embed(msg))
-                except KeyError:
-                    pass
+                        except discord.Forbidden:
+                            msg = f'Guest **{member.display_name}** could not be notified'
+                            await host.send(embed=tools.single_embed(msg))
+        self.sessions.pop(session_to_close, host.id)
+        await self.write_session()
 
-        for code in session_to_close:
-            del data[code]
-            await tools.write_sessions(data)
-
-    @commands.command()
-    async def dodo(self, ctx, *, dodo):
+    async def get_session_channel(self, member):
         """
-        Change the session's dodo code
-        :param ctx:
-        :param dodo:
+        :param member:
         :return:
         """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
-        data = await tools.read_sessions()
-        for session_code, value in data.items():
-            if value['host'] == ctx.author.id:
-                value['dodo code'] = dodo.upper()
-                dms_channel = await self.get_session_channel(ctx.author)
-                await dms_channel.send(embed=tools.single_embed(f'Your Dodo code has been changed to **{dodo.upper()}**'))
-        await tools.write_sessions(data)
+        for session_code, v in self.sessions.items():
+            if int(session_code) == member.id:
+                return self.client.get_channel(int(v['private_session']))
 
-    @commands.command()
-    async def welcome(self, ctx, *, message):
+    async def get_session_code(self, member):
         """
-        Set a welcome message. This message is sent to users when they get their dodo code
-        :param ctx:
-        :param message:
+        :param member:  member object
         :return:
         """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        prefix = await self.show_prefix(ctx.guild)
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
-
-        data = await tools.read_sessions()
-        session_code = await self.get_session_code(ctx.author)
-        data[session_code]['welcome'] = message
-        await tools.write_sessions(data)
-        msg = f'Your **welcome** message has been set to:\n' \
-              f'"{message}"\n' \
-              f'Members will receive it when you use the `{prefix}send` command.'
-        await ctx.send(embed=tools.single_embed(msg))
-
-    @commands.command()
-    async def menu(self, ctx):
-        """
-        Display a menu of possible host commands
-        :param ctx:
-        :return:
-        """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        prefix = await self.show_prefix(ctx.guild)
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
-
-        host_menu = f'**Daisy-Mae Session Commands**\n\n' \
-                    f'`{prefix}send` to send out codes to the next group in the queue\n' \
-                    f'`{prefix}end` to end the session.\n' \
-                    f'`{prefix}dodo code` change your dodo `code`. ex: `{prefix}dodo ABCDEF`\n' \
-                    f'`{prefix}show` to show the current queue\n' \
-                    f'`{prefix}notify message` send a message to everyone in your queue\n' \
-                    f'`{prefix}welcome message` set a message for your guests\n\n' \
-                    f'`{prefix}guest_kick member` to kick `member` from the queue.\n' \
-                    f'`{prefix}guest_bans` show current list of banned members\n' \
-                    f'`{prefix}guest_ban member` ban a `member` and prevent them from joining again \n' \
-                    f'`{prefix}guest_unban member` unban a `member`\n\n' \
-                    f'`{prefix}menu` to see these options again\n'
-        dms_channel = await self.get_session_channel(ctx.author)
-        await dms_channel.send(embed=tools.single_embed(host_menu, avatar=self.client.user.avatar_url))
-
-    @commands.command()
-    async def auto(self, ctx, minutes):
-        """
-        Create a looping auto timer that sends dodo codes every n minutes unless the next group is empty.
-        :param ctx:
-        :param minutes: Number of minutes before sending the next code. Use 'stop' to end the timer.
-        :return:
-        """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        await ctx.send(embed=tools.single_embed_neg(f'Auto has been turned off for now. Please pardon our dust.'))
-        return
-        #
-        # if not await self.is_host(ctx.author):
-        #     await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-        #     return
-        #
-        # prefix = await self.show_prefix(ctx.guild)
-        # session_code = await self.get_session_code(ctx.author)
-        # dms_channel = await self.get_session_channel(ctx.author)
-        #
-        # # stop the timer and notify guests
-        # if minutes.lower() == 'stop':
-        #     data = await tools.read_sessions()
-        #     data[session_code]['auto']['active'] = False
-        #     await tools.write_sessions(data)
-        #     await ctx.send(embed=tools.single_embed_neg(f'Your auto session was ended.'))
-        #
-        #     members_to_notify = []
-        #     for place, member_list in data[session_code]['groups'].items():
-        #         for uid in member_list:
-        #             members_to_notify.append(uid)
-        #
-        #     for uid in members_to_notify:
-        #         member = self.client.get_user(uid)
-        #         msg = f'Your host for session **{session_code}** has turned off their **auto** timer.'
-        #         await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-        #     return
-        #
-        # # set the loop for n minutes and begin loop
-        # else:
-        #     try:
-        #         minutes = int(minutes)
-        #         if minutes < 1:
-        #             await ctx.send(embed=tools.single_embed_neg(f'Please choose an integer greater than `0`.'))
-        #             return
-        #     except Exception as e:
-        #         print(e)
-        #         await ctx.send(embed=tools.single_embed_neg(f'Minutes must be an integer.'))
-        #         return
-        #
-        #     msg = f'Your auto timer is set to {minutes} minutes. Every {minutes} minutes, a group will be sent ' \
-        #           f'until you run out of groups or you enter `{prefix}auto stop`.'
-        #     await ctx.send(embed=tools.single_embed(msg))
-        #
-        #     data = await tools.read_sessions()
-        #     data[session_code]['auto']['active'] = True
-        #     data[session_code]['auto']['minutes'] = minutes
-        #     await tools.write_sessions(data)
-        #
-        #     while True:
-        #         data = await tools.read_sessions()
-        #         welcome = data[session_code]['welcome']
-        #         dodo_code = data[session_code]['dodo code']
-        #         auto = data[session_code]['auto']
-        #         groups = data[session_code]['groups']
-        #
-        #         # recheck the session every loop to determine if the timer has been turned off
-        #         if auto is False:
-        #             return
-        #
-        #         # send invite to group when auto timer clicks
-        #         if len(groups) >= 1:
-        #             place = list(groups.keys())[0]
-        #             if len(groups[place]) > 0:
-        #
-        #                 await dms_channel.send(embed=tools.single_embed(f'Sending Dodo code to **Group {place}**'))
-        #
-        #                 for user in data[session_code]['groups'][place]:
-        #                     member = self.client.get_user(int(user))
-        #                     if member is None:
-        #                         continue
-        #                     msg = f'You have gotten your Session Code for **{ctx.author.display_name}\'s** Session!\n' \
-        #                           f'Please do not forget to leave a review for your host when you finish.\n' \
-        #                           f'**Dodo Code**: `{dodo_code}`\n'
-        #                     if welcome is not None:
-        #                         msg += f'\n\n**Your host left you a message!**\n"{welcome}"'
-        #                     await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-        #                 del data[session_code]['groups'][place]
-        #                 await tools.write_sessions(data)
-        #
-        #                 # notify groups that they have moved up
-        #                 for place, member_list in data[session_code]['groups'].items():
-        #                     for uid in member_list:
-        #                         member = self.client.get_user(uid)
-        #                         position = list(groups.keys()).index(place) + 1
-        #                         msg = f'Your group in **Session {session_code}** has moved up! \n' \
-        #                               f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.\n' \
-        #                               f'**note**: Your host is using an auto timer. Dodo codes will be sent every {minutes} ' \
-        #                               f'minute(s). \n__Please conduct your business as quickly as possible__.'
-        #                         await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-        #                 try:
-        #                     await self.reshow(ctx.author)
-        #                 except Exception as e:
-        #                     print(f'An error occurred when trying to reshow during auto {e}')
-        #                 await asyncio.sleep(60 * data[session_code]['auto']['minutes'])
-        #         else:
-        #             await dms_channel.send(embed=tools.single_embed(f'Your auto session has ended.'))
-        #             return
-
-    @commands.command()
-    async def show(self, ctx):
-        """
-        Display a list of groups and guests in the host's DMS
-        :param ctx:
-        :return:
-        """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
-
-        data = await tools.read_sessions()
-        session_code = await self.get_session_code(ctx.author)
-
-        embed = discord.Embed(title=f'Groups in Queue for Session {session_code}', color=discord.Color.green())
-        embed.set_thumbnail(url=self.client.user.avatar_url)
-
-        per_group = data[session_code]['members per group']
-        dms_channel = await self.get_session_channel(ctx.author)
-
-        if len(data[session_code]['groups'].keys()) < 1:
-            msg = f'You are at the end of your groups. Consider starting a new session.'
-            await dms_channel.send(embed=tools.single_embed(msg))
-            return
-
-        for place, group in data[session_code]['groups'].items():
-            members = []
-            if len(group) == 0:
-                group = None
-                place = f'Group {place} (0/{per_group})'
-            else:
-                for uid in group:
-                    member = discord.utils.get(ctx.guild.members, id=uid)
-                    if member is None:
-                        data[session_code]['groups'][place].remove(uid)
-                        try:
-                            await member.send(f'You have been removed from session {session_code}')
-                            print(f'{member.display_name} removed from {session_code}')
-                        except Exception as e:
-                            print(e)
-                        continue
-                    else:
-                        reviewer_rank = await tools.get_reviewer_rank(db.get_reviews_given(member))
-                        members.append(f'{member.display_name} (rank: *{reviewer_rank}*)')
-            if group is not None:
-                group = '\n'.join(members)
-                place = f'Group {place} ({len(members)}/{per_group})'
-            embed.add_field(name=f'{place}', value=group, inline=False)
-        await dms_channel.send(embed=embed)
-
-    async def get_session_channel(self, dms_host):
-        data = await tools.read_sessions()
-        for k, v in data.items():
-            if v['host'] == dms_host.id:
-                return self.client.get_channel(v['session'])
-
-    @staticmethod
-    async def get_session_code(author):
-        data = await tools.read_sessions()
-        for session_code, values in data.items():
-            if values['host'] == author.id:
+        for session_code, values in self.sessions.items():
+            if int(session_code) == member.id:
                 return session_code
 
-    @commands.command()
-    async def guest_kick(self, ctx, member: discord.Member):
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
-        data = await tools.read_sessions()
-        session_code = await self.get_session_code(ctx.author)
-        dms_channel = await self.get_session_channel(ctx.author)
-
-        user_removed = False
-        groups = data[session_code]['groups']
-        for place, member_list in groups.items():
-            for uid in member_list:
-                if self.client.get_user(uid) == member:
-                    member_list.remove(uid)
-                    user_removed = True
-
-        if user_removed:
-            await tools.write_sessions(data)
-            await dms_channel.send(embed=tools.single_embed(f'Member **{member.mention}** kicked from session.'))
-            await member.send(embed=tools.single_embed_neg(f'You have been removed from **Session {session_code}**'))
-            await self.reshow(ctx.author)
-        else:
-            await dms_channel.send(embed=tools.single_embed_neg(f'Unable to find and kick **{member}**.'))
+    @staticmethod
+    def to_upper(argument):
+        return argument.upper()
 
     @commands.command()
-    async def send(self, ctx):
+    async def leave(self, ctx):
+        sessions_member_is_in = []
+        for session_code, values in self.sessions.items():
+            groups = self.sessions[session_code]['groups']
+            _type = self.sessions[session_code]['type']
+            for place, member_list in groups.items():
+                if ctx.author.id in member_list:
+                    host = discord.utils.get(ctx.guild.members, id=int(session_code))
+                    sessions_member_is_in.append((_type, session_code, host))
+        while True:
+            if len(sessions_member_is_in) < 1:
+                await ctx.send(embed=tools.single_embed('You are not in any sessions.'))
+                return
+            else:
+                reactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '⏩', '⏹']
+                session_list = [f'{sessions_member_is_in.index(s)+1}. {s[0]} - {s[2].display_name}\'s session ({s[1]})' for s in sessions_member_is_in]
+                title = 'Which session do you want to leave?'
+                embed = discord.Embed(title=title, description='\n'.join(session_list), color=discord.Color.green())
+                prompt = await ctx.send(embed=embed)
+                for i in range(len(sessions_member_is_in)):
+                    await prompt.add_reaction(reactions[i])
+                await prompt.add_reaction('⏹')
+
+                def check_react(react, user):
+                    return react.message.id == prompt.id and user.id == ctx.author.id
+
+                reaction, member = await self.client.wait_for('reaction_add', check=check_react)
+                session_left = None
+                if reaction.emoji == reactions[0]:
+                    session_left = sessions_member_is_in[0][1]
+                if reaction.emoji == reactions[1]:
+                    session_left = sessions_member_is_in[1][1]
+                if reaction.emoji == reactions[2]:
+                    session_left = sessions_member_is_in[2][1]
+                if reaction.emoji == reactions[3]:
+                    session_left = sessions_member_is_in[3][1]
+                if reaction.emoji == reactions[4]:
+                    session_left = sessions_member_is_in[4][1]
+                if reaction.emoji == reactions[5]:
+                    session_left = sessions_member_is_in[5][1]
+                if reaction.emoji == reactions[6]:
+                    session_left = sessions_member_is_in[6][1]
+                if reaction.emoji == reactions[7]:
+                    session_left = sessions_member_is_in[7][1]
+                if reaction.emoji == reactions[8]:
+                    session_left = sessions_member_is_in[8][1]
+                if reaction.emoji == reactions[9]:
+                    session_left = sessions_member_is_in[9][1]
+                if reaction.emoji == reactions[10]:
+                    del sessions_member_is_in[:10]
+                    await prompt.delete()
+                    continue
+                if reaction.emoji == '⏹':
+                    await prompt.delete()
+                    return
+
+                for session_code, values in self.sessions.items():
+                    if session_code == session_left:
+                        for place, member_list in self.sessions[session_code]['groups'].items():
+                            if ctx.author.id in member_list:
+                                self.sessions[session_code]['groups'][place].remove(ctx.author.id)
+
+                                # move queue up
+
+                                msg = f'You have left Session {session_code}.'
+                                await ctx.send(embed=tools.single_embed(msg), delete_after=5)
+                                msg = f'**{ctx.author.mention}** has left your queue.'
+                                # host = self.client.get_user(int(session_code))
+                                host = discord.utils.get(ctx.guild.members, id=int(session_code))
+                                private_channel = await self.get_session_channel(host)
+                                await private_channel.send(embed=tools.single_embed_neg(msg), delete_after=5)
+                                await prompt.delete()
+                                await self.show_queue(host)
+                                # await self.write_session()
+                                return
+                await prompt.delete()
+
+    async def send(self, host):
         """
         Send a dodo code to the next group in a DMS queue
-        :param ctx:
+        :param host: a member object
         :return:
         """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
+        session_code = await self.get_session_code(host)
+        private_channel = await self.get_session_channel(host)
 
-        data = await tools.read_sessions()
-        session_code = await self.get_session_code(ctx.author)
-        dms_channel = await self.get_session_channel(ctx.author)
-
-        welcome = data[session_code]['welcome']
-        groups = data[session_code]['groups']
+        groups = self.sessions[session_code]['groups']
+        history = self.sessions[session_code]['history']
         place = list(groups.keys())[0]
-        await dms_channel.send(embed=tools.single_embed(f'Sending Dodo code to **Group {place}**'))
+        msg = await private_channel.send(embed=tools.single_embed(f'Sending Dodo code to **Group {place}**'), delete_after=5)
+        await private_channel.fetch_message(msg.id)
 
-        for user in data[session_code]['groups'][place]:
-            try:
-                member = self.client.get_user(int(user))
-                if member is None:
-                    continue
-                msg = f'You have gotten your Session Code for **{ctx.author.display_name}\'s** Session!\n' \
-                      f'Please do not forget to leave a review for your host when you finish.\n'\
-                      f'**Dodo Code**: `{data[session_code]["dodo code"]}`\n'
-                if welcome is not None:
-                    msg += f'\n\n**Your host left you a message!**\n"{welcome}"'
-                await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-            except Exception as e:
-                print(f'an error occurred when sending a dodo code: {e}')
-        del data[session_code]['groups'][place]
-        await tools.write_sessions(data)
-
-        # notify groups that they have moved up
-        for place, member_list in groups.items():
-            for uid in member_list:
-                member = self.client.get_user(uid)
-                if member is None:
-                    continue
-                position = list(groups.keys()).index(place) + 1
-                msg = f'Your group in **Session {session_code}** has moved up! \n' \
-                      f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.'
-                await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+        # add temp check for island key
         try:
-            await self.reshow(ctx.author)
+            if "on_island" not in self.sessions[session_code]:
+                self.sessions[session_code]["on_island"] = []
         except Exception as e:
-            print(f'An error occurred when trying to reshow in the send command in channel {ctx.channel}: {e}')
+            print(e)
+            pass
 
-    @commands.command()
-    async def notify(self, ctx, group: str = None, *, message):
-        """
-        Send a DM to guests in a DMS queue
-        :param ctx:
-        :param group: The group to send a message to, if any
-        :param message:
-        :return:
-        """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
-        data = await tools.read_sessions()
-        session_code = await self.get_session_code(ctx.author)
-        dms_channel = await self.get_session_channel(ctx.author)
-        groups = data[session_code]['groups']
+        if len(self.sessions[session_code]['groups'][place]) < 1:
+            await private_channel.send(embed=tools.single_embed(f'**Group {place}** is empty.'), delete_after=5)
+        else:
+            # remove previous occupants
+            try:
+                if len(self.sessions[session_code]["on_island"]) > 0:
+                    self.sessions[session_code]["on_island"] = []
+            except Exception as e:
+                print(e)
+                pass
+            for user in self.sessions[session_code]['groups'][place]:
+                try:
+                    member = self.client.get_user(int(user))
+                    if member is None:
+                        continue
+                    msg = f'You have gotten your Session Code for **{host.display_name}\'s** Session!\n' \
+                          f'Please do not forget to leave a review for your host when you finish.\n'\
+                          f'**Dodo Code**: `{self.sessions[session_code]["dodo_code"]}`\n'
+                    await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+                    # add new guests to island
+                    try:
+                        self.sessions[session_code]["on_island"].append(user)
+                    except Exception as e:
+                        print(e)
+                        pass
+                except Exception as e:
+                    print(f'an error occurred when sending a dodo code: {e}')
+            for uid in self.sessions[session_code]['groups'][place]:
+                history.append(uid)
 
-        members_to_notify = []
-        try:
-            # try to send messages to a single group if possible.
-            # This fails if the first arg isn't an integer
-            int(group)
-            for uid in groups.get(str(group)):
-                members_to_notify.append(uid)
-        except ValueError:
-            # if a group isn't identified, send the message
-            # to all guests in the queue
+            del self.sessions[session_code]['groups'][place]
+
+            # notify groups that they have moved up
             for place, member_list in groups.items():
                 for uid in member_list:
-                    members_to_notify.append(uid)
+                    member = self.client.get_user(int(uid))
+                    if member is None:
+                        continue
+                    position = list(groups.keys()).index(place) + 1
+                    msg = f'Your group in **Session {session_code}** has moved up! \n'
+                    if int(position) == 1:
+                        msg += f'You are next in line! Please wait for your Dodo Code.'
+                    else:
+                        msg += f'You are now in **Position** `{position}` of `{len(list(groups.keys()))}`.'
+                    await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
 
-        could_not_notify = []
-        for uid in members_to_notify:
-            member = self.client.get_user(uid)
-            if member is None:
-                continue
-            try:
-                msg = f'You\'ve received a message from your Session host **{ctx.author.display_name}**:\n' \
-                      f'"{message}"'
-                await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
-            except discord.Forbidden:
-                could_not_notify.append(member.mention)
-        msg = f'Your message has been sent.'
-        if len(could_not_notify) > 0:
-            msg += f'\nNotifications did not reach {", ".join(could_not_notify)} because of closed DMs.'
-        await dms_channel.send(embed=tools.single_embed(f'Your message has been sent.'))
-
-    @commands.command()
-    async def guest_ban(self, ctx, member: discord.Member):
-        """
-        Remove a guest from the queue and add them to the ban list to prevent them from rejoining.
-        :param ctx:
-        :param member:
-        :return:
-        """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
+    async def show_history(self, host):
+        session_code = await self.get_session_code(host)
+        if session_code is None:
             return
-        data = await tools.read_sessions()
-        session_code = await self.get_session_code(ctx.author)
-        dms_channel = await self.get_session_channel(ctx.author)
-        ban_list = data[session_code]['ban list']
-
-        data = await tools.read_sessions()
-        if member.id not in ban_list:
-            data[session_code]['ban list'].append(member.id)
+        private_channel = await self.get_session_channel(host)
+        guild = private_channel.guild
+        history = self.sessions[session_code]['history']
+        if len(history) < 1:
+            description = 'Your history is empty'
         else:
-            await dms_channel.send(embed=tools.single_embed(f'**{member.mention}** is already banned from your session.'))
-            return
-        for place, member_list in data[session_code]['groups'].items():
-            if member.id in member_list:
-                member_list.remove(member.id)
-                await member.send(embed=tools.single_embed(f'You have been removed from Session **{session_code}**'))
-        await tools.write_sessions(data)
-        await dms_channel.send(embed=tools.single_embed(f'You have banned **{member.mention}** from your session.'))
-        await self.reshow(ctx.author)
+            members = [discord.utils.get(guild.members, id=int(uid)) for uid in history]
+            description = ', '.join([m.mention for m in members if m is not None])
+        embed = discord.Embed(title='Queue History', description=description, color=discord.Color.green())
+        embed.set_footer(text='History menu timeout is 60 seconds.')
+        prompt = await private_channel.send(embed=embed)
+        await prompt.add_reaction('❎')
 
-    @commands.command()
-    async def guest_unban(self, ctx, member: discord.Member):
-        """
-        Remove a guest from the ban list
-        :param ctx:
-        :param member:
-        :return:
-        """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
-        data = await tools.read_sessions()
-        session_code = await self.get_session_code(ctx.author)
-        dms_channel = await self.get_session_channel(ctx.author)
+        def check_react(react, actor):
+            return react.message.id == prompt.id and actor.id == host.id
 
-        if member.id in data[session_code]['ban list']:
-            data[session_code]['ban list'].remove(member.id)
-            await tools.write_sessions(data)
-            await ctx.send(embed=tools.single_embed(f'You have unbanned **{member.mention}** from your session.'))
-            member = self.client.get_user(member.id)
-            await member.send(embed=tools.single_embed(f'You have been unbanned from Session **{session_code}**'))
-        else:
-            await dms_channel.send(embed=tools.single_embed(f'**{member.mention}** is not in the ban list.'))
-
-    @commands.command()
-    async def guest_bans(self, ctx):
-        """
-        Show a list of currently banned guests
-        :param ctx:
-        :return:
-        """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        if not await self.is_host(ctx.author):
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are not hosting a Session.'))
-            return
-
-        data = await tools.read_sessions()
-        session_code = await self.get_session_code(ctx.author)
-        dms_channel = await self.get_session_channel(ctx.author)
-        ban_list = data[session_code]['ban list']
-
-        banned = '\n'.join([discord.utils.get(ctx.guild.members, id=m).display_name for m in ban_list])
-        if len(banned) is 0:
-            banned = None
-        await dms_channel.send(embed=tools.single_embed(f'**Banned Members**\n{banned}', avatar=self.client.user.avatar_url))
-
-    @commands.command()
-    async def join(self, ctx, session_code: str):
-        """
-        GUEST ACTION
-        Join a host's DMS session using the provided session code
-        :param ctx:
-        :param session_code:
-        :return:
-        """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        prefix = await self.show_prefix(ctx.guild)
-        session_code = session_code.upper()
-        data = await tools.read_sessions()
-
-        if await self.is_host(ctx.author) and ctx.author.id != 193416878717140992:
-            await ctx.send(embed=tools.single_embed_neg(f'You cannot **join** a session if you are **Hosting**.'))
-            return
-
-        # if session does not exist, notify the guest
         try:
-            data[session_code]
-        except KeyError:
-            await ctx.send(embed=tools.single_embed(f'That session does not exist.'))
+            reaction, member = await self.client.wait_for('reaction_add', check=check_react, timeout=60)
+            if reaction.emoji == '❎':
+                await prompt.clear_reactions()
+                await prompt.delete()
 
-        if data[session_code]['closed']:
-            await ctx.send(embed=tools.single_embed(f'This session is currently closed to new guests.'))
-            return
+        except asyncio.TimeoutError:
+            try:
+                await prompt.edit(embed=tools.single_embed('History timed out.'), delete_after=10)
+                await prompt.clear_reactions()
+            except discord.NotFound:
+                pass
+        except discord.NotFound:
+            pass
 
-        host = discord.utils.get(ctx.guild.members, id=data[session_code]['host'])
-        dms_channel = await self.get_session_channel(host)
-
-        if ctx.author.id == host.id and ctx.author.id != 193416878717140992:
-            await ctx.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-            return
-
-        if ctx.author.id in data[session_code]['ban list']:
-            msg = f'I\'m sorry. You are unable to join Session **{session_code}**.'
-            await ctx.author.send(embed=tools.single_embed_neg(msg))
-            return
-
-        groups = data[session_code]['groups']
-        for place, group in groups.items():
-            if ctx.author.id in group and ctx.author.id != 193416878717140992:
-                msg = f'You have already joined Session **{session_code}**.'
-                await ctx.send(embed=tools.single_embed(msg))
-                return
-
-        for place, group in groups.items():
-            if len(group) < data[session_code]['members per group']:
-                group.append(ctx.author.id)
-                msg = f'You have joined **Group {place}** in Session **{session_code}**\n' \
-                      f'You can use `{prefix}leave {session_code}` at any time to leave this Session.'
-                await ctx.send(embed=tools.single_embed(msg))
-                msg = f'**{ctx.author.display_name}** has joined **Group {place}**.'
-                await dms_channel.send(embed=tools.single_embed(msg))
-                await tools.write_sessions(data)
-                await self.reshow(host)
-                return
-            else:
-                continue
-
-        await ctx.send(f'Sorry, the Session you are trying to join is full.')
-
-    @commands.command()
-    async def leave(self, ctx, session_code):
-        """
-        GUEST ACTION
-        Leave a DMS queue with the corresponding session code
-        :param ctx:
-        :param session_code:
-        :return:
-        """
-        # if await self.is_host(ctx.author):
-        #     await ctx.send(embed=tools.single_embed_neg(f'You cannot run this command if you are hosting a Session.'))
-        #     return
-
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        data = await tools.read_sessions()
-        session_code = session_code.upper()
-
-        # get host because this is called by guests
-        host = discord.utils.get(ctx.guild.members, id=data[session_code]['host'])
-        dms_channel = await self.get_session_channel(host)
-
-        groups = data[session_code]['groups']
-        for place, group in groups.items():
-            if ctx.author.id in group:
-                data[session_code]['groups'][place].remove(ctx.author.id)
-                await ctx.author.send(embed=tools.single_embed(f'You have left **Session {session_code}**.'))
-                await dms_channel.send(embed=tools.single_embed(f'{ctx.author.display_name} has **left** your queue.'))
-                await tools.write_sessions(data)
-                host = discord.utils.get(ctx.guild.members, id=data[session_code]['host'])
-                await self.reshow(host)
-                return
-            else:
-                continue
-
-        # groups = data[session_code]['groups']
-        # for place, member_list in groups.items():
-        #     if ctx.author.id in member_list:
-        #         member_list.remove(ctx.author.id)
-        #
-        #         await tools.write_sessions(data)
-        #         await self.reshow(host)
-        #         return
-        await ctx.send(embed=tools.single_embed(f'You do not appear to be in a Session.'))
-
-    async def reshow(self, host):
+    async def show_queue(self, host, remove_reaction=None):
         """
         Show current groups and guests. Usually called after a host action but can be triggered by
         join or leave which requires the host arg
-        :param host: Required because this can be called by guest actions
+        :param host: a member object
+        :param remove_reaction:
         :return:
         """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        data = await tools.read_sessions()
+        # read to session_type
         session_code = await self.get_session_code(host)
-        dms_channel = await self.get_session_channel(host)
-
-        groups = data[session_code]['groups']
-        per_group = data[session_code]['members per group']
-
-        if len(data[session_code]['groups'].keys()) < 1:
-            msg = f'You are at the end of your groups. Consider starting a new session.'
-            await dms_channel.send(embed=tools.single_embed(msg))
+        if session_code is None:
             return
+        private_channel = await self.get_session_channel(host)
 
-        embed = discord.Embed(title=f'Groups Updated for Session {session_code}', color=discord.Color.green())
-        embed.set_thumbnail(url=self.client.user.avatar_url)
+        groups = self.sessions[session_code]['groups']
+        per_group = self.sessions[session_code]['members_per']
 
-        for place, group in groups.items():
-            members = []
+        dodo_code = self.sessions[session_code]['dodo_code']
+        status = self.sessions[session_code]['open']
+        if status is True:
+            status = 'Open 🔓'
+        else:
+            status = 'Closed 🔒'
+        description = f'Status: {status}\n Dodo Code: {dodo_code}'
+        embed = discord.Embed(title=f'Your Queue', color=discord.Color.green(), description=description)
+
+        try:
+            if "on_island" in self.sessions[session_code]:
+                on_island = self.sessions[session_code]["on_island"]
+                if len(on_island) < 1:
+                    embed.add_field(name='🏝️ On Island', value='No one is here!', inline=False)
+                else:
+                    members = []
+                    for uid in on_island:
+                        member = discord.utils.get(host.guild.members, id=int(uid))
+                        if member is None:
+                            self.sessions[session_code]["on_island"].remove(uid)
+                            continue
+                        else:
+                            members.append(member.display_name)
+                    embed.add_field(name='🏝️ On Island', value='\n'.join(members), inline=False)
+        except Exception as e:
+            print(e)
+            pass
+        if len(groups.items()) < 1:
+            embed.add_field(name=f'There are no groups in your queue', value='\u200b')
+        else:
+            for place, group in groups.items():
+                members = []
+                if len(group) == 0:
+                    group = None
+                    place = f'Group {place} (0/{per_group})'
+                else:
+                    for uid in group:
+                        member = discord.utils.get(host.guild.members, id=int(uid))
+                        if member is None:
+                            self.sessions[session_code]['groups'][place].remove(uid)
+                            continue
+                        else:
+                            members.append(f'🧳{member.display_name}')
+
+                if group is not None:
+                    group = '\n'.join(members)
+                    place = f'Group {place} ({len(members)}/{per_group})'
+                embed.add_field(name=f'{place}', value=group)
+            try:
+                if len(groups) % 2 != 0:
+                    embed.add_field(name='\u200b', value='\u200b')
+            except Exception as e:
+                print(e)
+                pass
+
+        send = '➡ Send next group'
+        end = '⏹ End session'
+        kick = '🥾 Kick guest'
+        ban = '🚫 Ban guest'
+        history = '📜 History'
+        dodo = '🔁 Change Dodo'
+        notify = '💬 Notify Guests'
+        addgroup = '➕ Add a group'
+        close_open = '⏯ Close/Open queue'
+        options1 = f'```\n' \
+                   f'{send}\n' \
+                   f'{end}\n' \
+                   f'{close_open}\n' \
+                   f'{dodo}\n' \
+                   f'```'
+        options2 = f'```\n' \
+                   f'{kick}\n' \
+                   f'{ban}\n' \
+                   f'{history}' \
+                   f'```'
+        options3 = f'```\n' \
+                   f'{notify}\n' \
+                   f'{addgroup}\n' \
+                   f'\n' \
+                   f'```'
+        embed.add_field(name='\u200b', value='```\nHost Options```', inline=False)
+        embed.add_field(name='\u200b', value=options1)
+        embed.add_field(name='\u200b', value=options2)
+        embed.add_field(name='\u200b', value=options3)
+
+        # edit queue in place if not exists
+        queue_id = self.sessions[session_code]['queue_id']
+        if queue_id is None:
+            queue = await private_channel.send(embed=embed)
+            self.sessions[session_code]['queue_id'] = queue.id
+        else:
+            queue = await private_channel.fetch_message(id=queue_id)
+            await queue.edit(embed=embed)
+            if remove_reaction is not None:
+                await queue.remove_reaction(remove_reaction, host)
+            self.sessions[session_code]['queue_id'] = queue.id
+
+        # update queue id
+        self.sessions[session_code]['queue_id'] = queue.id
+
+        reactions = ['➡', '⏹', '⏯', '🔁', '🥾', '🚫', '📜', '💬', '➕']
+        for r in reactions:
+            await queue.add_reaction(r)
+
+        # await self.write_session()
+
+    async def pause(self, host):
+        session_code = await self.get_session_code(host)
+        status = self.sessions[session_code]['open']
+        if status is True:
+            self.sessions[session_code]['open'] = False
+        else:
+            self.sessions[session_code]['open'] = True
+
+    async def add_group(self, host):
+        session_code = await self.get_session_code(host)
+        last_place = int(list(self.sessions[session_code]['groups'].keys())[-1])
+        last_place += 1
+        self.sessions[session_code]['groups'][last_place] = []
+
+    async def notify_guests(self, host):
+        def check_msg(m):
+            return m.author == host and m.channel == private_channel
+
+        session_code = await self.get_session_code(host)
+        private_channel = await self.get_session_channel(host)
+
+        embed = discord.Embed(title='What is your message?', color=discord.Color.green())
+        prompt = await private_channel.send(embed=embed)
+        notification = await self.client.wait_for('message', check=check_msg)
+        await private_channel.purge(limit=1)
+        await prompt.delete()
+
+        groups = self.sessions[session_code]['groups']
+        could_not_reach = []
+        for place, member_list in groups.items():
+            for uid in member_list:
+                try:
+                    member = self.client.get_user(uid)
+                    msg = f'You\'ve received a message from your Session host **{host.display_name}**:\n' \
+                          f'"{notification.content}"'
+                    await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+                except Exception as e:
+                    could_not_reach.append(self.client.get_user(uid))
+                    print(f'{host} could not send a message to {self.client.get_user(uid)}', e)
+        msg = f'Your message has been sent.'
+        delete_after = 5
+        if len(could_not_reach) > 0:
+            msg += f' Your message was not able to reach {", ".join([m.display_name for m in could_not_reach])}'
+            delete_after = 10
+        await private_channel.send(embed=tools.single_embed(msg), delete_after=delete_after)
+
+    async def change_dodo(self, host):
+        def check_msg(m):
+            return m.author == host and m.channel == private_channel
+
+        for session_code, value in self.sessions.items():
+            if int(session_code) == host.id:
+                private_channel = await self.get_session_channel(host)
+                embed = discord.Embed(title='Please enter your new Dodo Code', color=discord.Color.green())
+                prompt = await private_channel.send(embed=embed)
+                msg = await self.client.wait_for('message', check=check_msg)
+                self.sessions[session_code]['dodo_code'] = msg.content.upper()
+                await private_channel.purge(limit=1)
+                msg = f'Your code has been changed to **{self.sessions[session_code]["dodo_code"]}**'
+                await prompt.edit(embed=tools.single_embed(msg), delete_after=5)
+
+    async def guest_kick(self, host):
+        """
+        Kick a guest from a session
+        :param host: member object
+        :return:
+        """
+
+        session_code = await self.get_session_code(host)
+        private_channel = await self.get_session_channel(host)
+        to_kick = []
+
+        for place, group in self.sessions[session_code]['groups'].items():
             if len(group) == 0:
-                group = None
-                place = f'Group {place} (0/{per_group})'
+                pass
             else:
                 for uid in group:
-                    member = discord.utils.get(host.guild.members, id=uid)
+                    member = discord.utils.get(host.guild.members, id=int(uid))
                     if member is None:
-                        data[session_code]['groups'][place].remove(uid)
                         continue
                     else:
-                        reviewer_rank = await tools.get_reviewer_rank(db.get_reviews_given(member))
+                        to_kick.append(member)
 
-                        members.append(f'{member.display_name} (rank: *{reviewer_rank}*)')
-                        # members.append(f'{member.display_name}')
-            if group is not None:
-                group = '\n'.join(members)
-                place = f'Group {place} ({len(members)}/{per_group})'
-            embed.add_field(name=f'{place}', value=group, inline=False)
-        await dms_channel.send(embed=embed)
+        while True:
+            if len(to_kick) > 0:
+                reactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '⏩', '⏹']
+                msg = '\n'.join(f'{to_kick.index(member) + 1}. {member.display_name}' for member in to_kick[:10])
+                embed = discord.Embed(title='Who do you want to kick?', description=msg, color=discord.Color.green())
+                embed.set_thumbnail(url=self.client.user.avatar_url)
+                prompt = await private_channel.send(embed=embed)
+                for i in range(0, len(to_kick[:11])):
+                    await prompt.add_reaction(reactions[i])
+                await prompt.add_reaction('⏹')
+
+                def check_react(react, user):
+                    return react.message.id == prompt.id and user.id == host.id
+
+                reaction, member = await self.client.wait_for('reaction_add', check=check_react)
+                kicked_member = None
+                if reaction.emoji == reactions[0]:
+                    kicked_member = to_kick[0]
+                if reaction.emoji == reactions[1]:
+                    kicked_member = to_kick[1]
+                if reaction.emoji == reactions[2]:
+                    kicked_member = to_kick[2]
+                if reaction.emoji == reactions[3]:
+                    kicked_member = to_kick[3]
+                if reaction.emoji == reactions[4]:
+                    kicked_member = to_kick[4]
+                if reaction.emoji == reactions[5]:
+                    kicked_member = to_kick[5]
+                if reaction.emoji == reactions[6]:
+                    kicked_member = to_kick[6]
+                if reaction.emoji == reactions[7]:
+                    kicked_member = to_kick[7]
+                if reaction.emoji == reactions[8]:
+                    kicked_member = to_kick[8]
+                if reaction.emoji == reactions[9]:
+                    kicked_member = to_kick[9]
+                if reaction.emoji == reactions[10]:
+                    del to_kick[:10]
+                    await prompt.delete()
+                    continue
+                if reaction.emoji == '⏹':
+                    await prompt.delete()
+                    return
+
+                member_kick = None
+                for place, member_list in self.sessions[session_code]['groups'].items():
+                    for uid in member_list:
+                        if self.client.get_user(uid) == kicked_member:
+                            member_kick = kicked_member
+                            try:
+                                self.sessions[session_code]['groups'][place].remove(uid)
+                                to_kick.remove(kicked_member)
+                            except ValueError as e:
+                                print(e)
+                msg = f'Member **{member_kick.mention}** kicked from session.'
+                await private_channel.send(embed=tools.single_embed(msg), delete_after=5)
+
+                msg = f'You have been removed from **Session {session_code}**'
+                await member_kick.send(embed=tools.single_embed_neg(msg))
+
+                await prompt.delete()
+                return
+            else:
+                embed = discord.Embed(title='Your queue is empty')
+                await private_channel.send(embed=embed, delete_after=5)
+                return
+
+    async def guest_ban(self, host):
+        """
+        Kick a guest from a session
+        :param host: member object
+        :return:
+        """
+
+        session_code = await self.get_session_code(host)
+        private_channel = await self.get_session_channel(host)
+        to_ban = []
+
+        for place, group in self.sessions[session_code]['groups'].items():
+            if len(group) == 0:
+                pass
+            else:
+                for uid in group:
+                    member = discord.utils.get(host.guild.members, id=int(uid))
+                    if member is None:
+                        continue
+                    else:
+                        to_ban.append(member)
+
+        while True:
+            if len(to_ban) > 0:
+                reactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '⏩', '⏹']
+                msg = '\n'.join(f'{to_ban.index(member) + 1}. {member.display_name}' for member in to_ban[:10])
+                embed = discord.Embed(title='Who do you want to ban?', description=msg, color=discord.Color.green())
+                embed.set_thumbnail(url=self.client.user.avatar_url)
+                prompt = await private_channel.send(embed=embed)
+                for i in range(0, len(to_ban[:11])):
+                    await prompt.add_reaction(reactions[i])
+                await prompt.add_reaction('⏹')
+
+                def check_react(react, user):
+                    return react.message.id == prompt.id and user.id == host.id
+
+                reaction, member = await self.client.wait_for('reaction_add', check=check_react)
+                kicked_member = None
+                if reaction.emoji == reactions[0]:
+                    kicked_member = to_ban[0]
+                if reaction.emoji == reactions[1]:
+                    kicked_member = to_ban[1]
+                if reaction.emoji == reactions[2]:
+                    kicked_member = to_ban[2]
+                if reaction.emoji == reactions[3]:
+                    kicked_member = to_ban[3]
+                if reaction.emoji == reactions[4]:
+                    kicked_member = to_ban[4]
+                if reaction.emoji == reactions[5]:
+                    kicked_member = to_ban[5]
+                if reaction.emoji == reactions[6]:
+                    kicked_member = to_ban[6]
+                if reaction.emoji == reactions[7]:
+                    kicked_member = to_ban[7]
+                if reaction.emoji == reactions[8]:
+                    kicked_member = to_ban[8]
+                if reaction.emoji == reactions[9]:
+                    kicked_member = to_ban[9]
+                if reaction.emoji == reactions[10]:
+                    del to_ban[:10]
+                    await prompt.delete()
+                    continue
+                if reaction.emoji == '⏹':
+                    await prompt.delete()
+                    return
+
+                member_kick = None
+                for place, member_list in self.sessions[session_code]['groups'].items():
+                    for uid in member_list:
+                        if self.client.get_user(uid) == kicked_member:
+                            member_kick = kicked_member
+                            try:
+                                self.sessions[session_code]['groups'][place].remove(uid)
+                                self.sessions[session_code]['ban_list'].append(uid)
+                                to_ban.remove(kicked_member)
+                            except ValueError as e:
+                                print(e)
+                msg = f'Member **{member_kick.mention}** banned from session.'
+                await private_channel.send(embed=tools.single_embed(msg), delete_after=5)
+
+                msg = f'You have been banned from **Session {session_code}**'
+                await member_kick.send(embed=tools.single_embed_neg(msg))
+
+                await prompt.delete()
+                return
+            else:
+                embed = discord.Embed(title='Your queue is empty')
+                await private_channel.send(embed=embed, delete_after=5)
+                return
 
     async def promote(self, session_code):
         """
@@ -1059,10 +1414,8 @@ class DMS(commands.Cog):
         :param session_code:
         :return:
         """
-        print(inspect.stack()[1][3], '->', inspect.stack()[0][3])
-        data = await tools.read_sessions()
-        groups = data[session_code]['groups']
-        members_per_group = data[session_code]['members per group']
+        groups = self.sessions[session_code]['groups']
+        members_per_group = self.sessions[session_code]['members per group']
         not_filled = None
         user_to_move = None
 
@@ -1074,10 +1427,9 @@ class DMS(commands.Cog):
             if not_filled is not None and len(member_list) > 0:
                 user_to_move = member_list[0]
             if not_filled is not None and user_to_move is not None:
-                data[session_code]['groups'][not_filled] = user_to_move
+                self.sessions[session_code]['groups'][not_filled] = user_to_move
                 member = self.client.get_user(user_to_move)
                 await member.send(f'You have been moved up to **Group {not_filled}**!')
-                await tools.write_sessions(data)
 
     async def is_host(self, member):
         session_code = await self.get_session_code(member)
@@ -1087,162 +1439,144 @@ class DMS(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
-        """
-        Allow a guest to join a session by using reactions
-        :param payload:
-        :return:
-        """
-        # if payload isn't turnip
-        if payload.emoji.id != _turnip_emoji:
+        # check queue reactions
+        try:
+            guild = self.client.get_guild(payload.guild_id)
+            user = discord.utils.get(guild.members, id=payload.user_id)
+            if user.bot or user is None:
+                return
+        except AttributeError as e:
+            print('raw reaction error', e)
             return
 
-        # ignore DMs
-        if payload.guild_id is None:
-            return
+        emoji = payload.emoji.name
+        message = payload.message_id
 
-        guild = self.client.get_guild(payload.guild_id)
-        author = discord.utils.get(guild.members, id=payload.user_id)
-        # if bot reacts
-        if author == self.client.user:
-            return
+        reactions = ['➡', '⏹', '⏯', '🔁', '🥾', '🚫', '💬', '➕', '📜']
+        if emoji in reactions:
+            try:
+                if emoji == '➡':
+                    await self.send(user)
+                    await self.show_queue(user, emoji)
 
-        spam = db.get_spam(guild)
-        data = await tools.read_sessions()
-        for session_code, value in data.items():
-            # if session doesn't have a message ID, guest cannot join anyway
-            check = value.get('message id', None)
-            if check is None:
-                continue
-            # if reaction is to the session's message
-            elif value['message id'] == payload.message_id:
-                if await self.is_host(author):
-                    msg = f'You cannot **join** a session if you are **Hosting**.'
-                    await author.send(embed=tools.single_embed_neg(msg))
-                    return
+                if emoji == reactions[1]:
+                    session_code = await self.get_session_code(user)
+                    if message == self.sessions[session_code]['queue_id']:
+                        private_channel = await self.get_session_channel(user)
+                        msg = 'Are you sure you want to end your session?'
+                        confirm = await private_channel.send(embed=tools.single_embed(msg))
+                        await confirm.add_reaction('🇾')
+                        await confirm.add_reaction('🇳')
+                        await asyncio.sleep(0)
 
-                if author.id == data[session_code]['host']:
-                    await author.send(embed=tools.single_embed(f'You cannot join your own Session.'))
-                    return
+                        def check_react(react, actor):
+                            return react.message.id == confirm.id and not actor.bot
 
-                ban_list = data[session_code]['ban list']
-                if author.id in ban_list:
-                    msg = f'I\'m sorry. You are unable to join Session **{session_code}**.'
-                    await author.send(embed=tools.single_embed_neg(msg))
-                    return
-
-                opn = data[session_code]['closed']
-                if opn and payload.user_id != 193416878717140992:
-                    await author.send(embed=tools.single_embed(f'This session is currently closed to new guests.'))
-                    return
-
-                for place, group in data[session_code]['groups'].items():
-                    if author.id in group and payload.user_id != 193416878717140992:
-                        msg = f'You have already joined Session **{session_code}**.'
-                        await author.send(embed=tools.single_embed(msg))
-                        return
-
-                groups = data[session_code]['groups']
-                for place, group in groups.items():
-                    if len(group) < data[session_code]['members per group']:
-                        group.append(author.id)
-                        prefix = await self.show_prefix(guild)
-                        msg = f'You have joined **Group {place}** in Session **{session_code}**\n' \
-                              f'You can use `{prefix}leave {session_code}` at any time to leave this Session.'
-                        try:
-                            await author.send(embed=tools.single_embed(msg))
-                        except discord.Forbidden:
-                            print(f'Could not send group join to {author}')
-                            # channel = self.client.get_channel(payload.channel_id)
-                            # await channel.send(f'{author.mention}: Your invite could not be sent. Please verify that your DMs are open.', delete_after=5)
-                            msg = f'{author.mention}, your DMs appear to be turned off which prevents Mae from sending you queue updates'
-                            await spam.send(embed=tools.single_embed_neg(msg))
+                        reaction, member = await self.client.wait_for('reaction_add', check=check_react)
+                        if reaction.emoji == '🇾':
+                            await self.end(user)
                             return
-                        msg = f'**{author.display_name}** has joined **Group {place}**.'
-                        dms = self.client.get_channel(data[session_code]['session'])
-                        await dms.send(embed=tools.single_embed(msg))
-                        await tools.write_sessions(data)
-                        host = discord.utils.get(guild.members, id=data[session_code]['host'])
-                        await self.reshow(host)
+                        if reaction.emoji == '🇳':
+                            await confirm.delete()
+
+                if emoji == reactions[2]:
+                    await self.pause(user)
+                    await self.show_queue(user, emoji)
+
+                if emoji == reactions[3]:
+                    await self.change_dodo(user)
+                    await self.show_queue(user, emoji)
+
+                if emoji == reactions[4]:
+                    await self.guest_kick(user)
+                    await self.show_queue(user, emoji)
+
+                if emoji == reactions[5]:
+                    await self.guest_ban(user)
+                    await self.show_queue(user, emoji)
+
+                if emoji == reactions[6]:
+                    await self.notify_guests(user)
+                    await self.show_queue(user, emoji)
+
+                if emoji == reactions[7]:
+                    await self.add_group(user)
+                    await self.show_queue(user, emoji)
+
+                if emoji == reactions[8]:
+                    await self.show_history(user)
+                    await self.show_queue(user, emoji)
+
+            except KeyError as e:
+                print('no session found', e)
+            except discord.Forbidden as e:
+                print(e)
+
+        # check join reactions
+        guild = self.client.get_guild(payload.guild_id)
+        reactions = ['🦝', '🐷', '⭐']
+        if emoji in reactions:
+            for session_code in self.sessions:
+                if self.sessions[session_code]['message_id'] == message:
+                    if await self.is_host(user) and user.id != 193416878717140992:
+                        msg = f'You cannot **join** a session if you are **Hosting**.'
+                        await user.send(embed=tools.single_embed_neg(msg))
                         return
-                    else:
-                        continue
 
-                try:
-                    await author.send(f'Sorry, the Session you are trying to join is full.')
-                except discord.Forbidden:
-                    msg = f'{author.mention}, your DMs appear to be turned off which prevents Mae from sending you queue updates'
-                    await spam.send(embed=tools.single_embed_neg(msg))
+                    if user.id == self.sessions[session_code] and user.id != 193416878717140992:
+                        await user.send(embed=tools.single_embed(f'You cannot join your own Session.'))
+                        return
 
-    async def wizard_end(self, ctx):
-        data = await tools.read_sessions()
+                    ban_list = self.sessions[session_code]['ban_list']
+                    if user.id in ban_list:
+                        msg = f'I\'m sorry. You are unable to join Session **{session_code}**.'
+                        await user.send(embed=tools.single_embed_neg(msg))
+                        return
 
-        session_to_close = []
-        for session_code, value in data.items():
-            if value['host'] == ctx.author.id:
-                session_to_close.append(session_code)
-                channel = self.client.get_channel(value['session'])
+                    _open = self.sessions[session_code]['open']
+                    if not _open:
+                        await user.send(embed=tools.single_embed(f'This session is currently closed to new guests.'))
+                        return
 
-                # edit private session notification if available
-                msg = f'Private Session **closed**.'
-                await tools.edit_msg(
-                    self.client.get_channel(value['notification'][1]),
-                    value['notification'][0],
-                    msg, delete_after=30
-                )
-                if channel is not None:
-                    await tools.close_private_channel(channel)
+                    for place, group in self.sessions[session_code]['groups'].items():
+                        if user.id in group and user.id != 193416878717140992:
+                            msg = f'You have already joined Session **{session_code}**.'
+                            await user.send(embed=tools.single_embed(msg))
+                            return
 
-                # edit sell embed if available
-                try:
-                    msg = f'Session **{session_code}** is now **closed**.'
-                    await tools.edit_msg(
-                        self.client.get_channel(_dms_channel),
-                        value['message id'],
-                        msg, delete_after=30
-                    )
-                except KeyError:
-                    pass
+                    members_per_group = self.sessions[session_code]['members_per']
+                    for place, group in self.sessions[session_code]['groups'].items():
+                        try:
+                            if len(group) < members_per_group:
+                                group.append(user.id)
+                                prefix = await self.show_prefix(guild)
+                                msg = f'You have joined a session\n' \
+                                      f'**Group {place}** Session **{session_code}**\n' \
+                                      f'You can use `{prefix}queue` to view your sessions or `{prefix}leave` in the ' \
+                                      f'bot-commands channel to leave any sessions you have joined.' \
+                                      f'__You will receive the Host\'s Dodo Code when your group is called.__'
+                                await user.send(embed=tools.single_embed(msg))
+                                msg = f'**{user.mention}** has joined **Group {place}**.'
+                                dms = self.client.get_channel(self.sessions[session_code]['private_session'])
+                                await dms.send(embed=tools.single_embed(msg), delete_after=5)
+                                host = discord.utils.get(guild.members, id=int(session_code))
+                                await self.show_queue(host)
+                                return
+                        except AttributeError as e:
+                            print('More than one session found in the session file for this user', e)
+                            return
+                    await user.send(embed=tools.single_embed(f'Sorry, the Session you are trying to join is full.'))
 
-                try:
-                    groups = data[session_code]['groups']
-                    for place, member_list in groups.items():
-                        for uid in member_list:
-                            member = self.client.get_user(uid)
-                            msg = f'Session **{session_code}** was **closed** by the host.'
-                            await member.send(embed=tools.single_embed(msg))
-                except KeyError:
-                    pass
+    # noinspection PyCallingNonCallable
+    @tasks.loop(seconds=15)
+    async def loop_session(self):
+        with open('sessions/sessions.json', 'w') as f:
+            json.dump(self.sessions, f, indent=4)
 
-        for code in session_to_close:
-            del data[code]
-            await tools.write_sessions(data)
-
-    @commands.Cog.listener()
-    async def on_raw_reaction_remove(self, payload):
-        return
-
-    @join.error
-    async def on_command_error(self, ctx, error):
-        if isinstance(error, AttributeError):
-            func = inspect.stack()[1][3]
-            await print(func + ' ' + error)
-
-    @guest_kick.error
-    async def on_command_error(self, ctx, error):
-        if isinstance(error, commands.BadArgument):
-            await ctx.send(embed=tools.single_embed_neg(f'{error}'))
-
-    @leave.error
-    async def on_command_error(self, ctx, error):
-        prefix = await self.show_prefix(ctx.guild)
-        if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(embed=tools.single_embed_neg(f'Please enter a Session code.\n`{prefix}leave code`'))
-
-    @guest_ban.error
-    async def on_command_error(self, ctx, error):
-        if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(embed=tools.single_embed_neg(f'{error}'))
+    async def write_session(self):
+        with open('sessions/sessions.json', 'w') as f:
+            json.dump(self.sessions, f, indent=4)
 
 
 def setup(client):
-    client.add_cog(DMS(client))
+    client.add_cog(Queue(client))
