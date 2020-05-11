@@ -2,7 +2,6 @@ import asyncio
 import json
 import discord
 import aiohttp
-import asyncpg
 import util.tools as tools
 import util.db as db
 from discord.ext import commands, tasks
@@ -34,7 +33,7 @@ class BetaFeatures(commands.Cog):
 
     @commands.command()
     @commands.is_owner()
-    async def clean(self, ctx):
+    async def clean(self):
         self.sessions = {}
         with open('sessions/session.json', 'w') as f:
             json.dump(self.sessions, f, indent=4)
@@ -100,13 +99,6 @@ class BetaFeatures(commands.Cog):
             return offending_words
         else:
             return False
-
-    @commands.command()
-    @commands.has_any_role('mae-supporters', 'ADMIN', 'Merch Dept.', 'TECHNICIAN')
-    async def pfp(self, ctx, member: discord.Member):
-        embed = discord.Embed(title=f'{member.display_name}\'s Avatar', color=member.color)
-        embed.set_image(url=member.avatar_url)
-        await ctx.send(embed=embed)
 
     @staticmethod
     async def fetch(session, url):
@@ -178,7 +170,7 @@ class BetaFeatures(commands.Cog):
         notification = await ctx.send(embed=tools.single_embed(msg))
 
         msg = f'**Welcome to the Daisy-Mae Queue Wizard!**\n' \
-              f':raccoon: Create Turnip Session\n' \
+              f':raccoon: Create Timmy/Tommy Session\n' \
               f':pig: Create Daisy-Mae Session\n' \
               f':star: Create Catalogue Session\n\n' \
               f':x: Quit'
@@ -525,7 +517,7 @@ class BetaFeatures(commands.Cog):
                                   f'Max Groups: `{max_groups}`\n' \
                                   f':exclamation: How many guests per group? (max 7)\n' \
                                   f':exclamation: Enter positive integers only between 1 and 7.'
-                    embed = await self.dms_embed(title + ' (3/6)', description)
+                    embed = await self.dms_embed(title + ' (4/6)', description)
                     await prompt.edit(embed=embed)
             except ValueError:
                 await msg.delete()
@@ -534,7 +526,7 @@ class BetaFeatures(commands.Cog):
                               f'Max Groups: `{max_groups}`\n' \
                               f':exclamation: How many guests per group? (max 7)\n' \
                               f':exclamation: Enter positive integers only between 1 and 7.'
-                embed = await self.dms_embed(title + ' (3/6)', description)
+                embed = await self.dms_embed(title + ' (4/6)', description)
                 await prompt.edit(embed=embed)
 
         # get session instructions
@@ -599,7 +591,7 @@ class BetaFeatures(commands.Cog):
                       f':exclamation: Your session is ready! Click ✅ to post it.'
         embed = await self.dms_embed(title, description)
         embed.set_image(url=img.url)
-        prompt = await private_session.send(embed=embed)
+        await prompt.edit(embed=embed)
         await prompt.add_reaction('✅')
         await prompt.add_reaction('❌')
         await asyncio.sleep(0)
@@ -744,7 +736,7 @@ class BetaFeatures(commands.Cog):
                       f'Max Groups: `{max_groups}`\n' \
                       f'Guests per Group: `{per_group}`\n' \
                       f':exclamation: Please enter a session message. Use this to give instructions to ' \
-                      f'your guests. For generic sessions, this message is very important. Please be clear!'
+                      f'your guests. For catalogue sessions, this message is very important. Please be clear!'
         embed = await self.dms_embed(title + ' (5/6)', description)
         await prompt.edit(embed=embed)
         msg = await self.client.wait_for('message', check=check_msg)
@@ -756,7 +748,7 @@ class BetaFeatures(commands.Cog):
                       f'Channel: {posting_channel.mention}\n' \
                       f'Max Groups: `{max_groups}`\n' \
                       f'Guests per Group: `{per_group}`\n' \
-                      f'Session Message: `{session_message}`\n' \
+                      f'Session Message: {session_message}\n' \
                       f':exclamation: Please attach a picture for your session.'
         embed = await self.dms_embed(title + ' (6/6)', description)
         await prompt.edit(embed=embed)
@@ -774,7 +766,7 @@ class BetaFeatures(commands.Cog):
                       f'Channel: {posting_channel.mention}\n' \
                       f'Max Groups: `{max_groups}`\n' \
                       f'Guests per Group: `{per_group}`\n' \
-                      f'Session Message: `{session_message}`\n' \
+                      f'Session Message: {session_message}\n' \
                       f'Image attached.\n' \
                       f':exclamation: Your session is ready! Click ✅ to post it.'
         embed = await self.dms_embed(title, description)
@@ -796,7 +788,6 @@ class BetaFeatures(commands.Cog):
                       f'**Players per Group**: {per_group}\n\n' \
                       f'**Message from the Host**: {session_message}'
                 embed = discord.Embed(color=discord.Color.green(), description=msg)
-                # embed.set_thumbnail(url=self.client.user.avatar_url)
                 embed.set_thumbnail(url=ctx.author.avatar_url)
                 embed.set_image(url=img.url)
                 posting = await sell_channel.send(embed=embed)
@@ -1116,26 +1107,20 @@ class BetaFeatures(commands.Cog):
         groups = self.sessions[session_code]['groups']
         per_group = self.sessions[session_code]['members_per']
 
-        # if len(self.sessions[session_code]['groups'].keys()) < 1:
-        #     msg = f'You are at the end of your groups. Please end your session and consider starting a new session.'
-        #     await private_channel.send(embed=tools.single_embed(msg))
-        #     return
-
         dodo_code = self.sessions[session_code]['dodo_code']
         status = self.sessions[session_code]['open']
         if status is True:
-            status = 'Open'
+            status = 'Open 🔓'
         else:
-            status = 'Closed'
+            status = 'Closed 🔒'
         description = f'Status: {status}\n Dodo Code: {dodo_code}'
         embed = discord.Embed(title=f'Your Queue', color=discord.Color.green(), description=description)
-        # embed.set_thumbnail(url=self.client.user.avatar_url)
 
         try:
             if "on_island" in self.sessions[session_code]:
                 on_island = self.sessions[session_code]["on_island"]
                 if len(on_island) < 1:
-                    embed.add_field(name='🏝️ On Island', value='No one is here!')
+                    embed.add_field(name='🏝️ On Island', value='No one is here!', inline=False)
                 else:
                     members = []
                     for uid in on_island:
@@ -1634,7 +1619,8 @@ class BetaFeatures(commands.Cog):
                             return
                     await user.send(embed=tools.single_embed(f'Sorry, the Session you are trying to join is full.'))
 
-    @tasks.loop(seconds=30)
+    # noinspection PyCallingNonCallable
+    @tasks.loop(seconds=15)
     async def loop_session(self):
         # async with self.client.pool.acquire() as con:
         with open('sessions/session.json', 'w') as f:
@@ -1657,4 +1643,3 @@ class BetaFeatures(commands.Cog):
 
 def setup(client):
     client.add_cog(BetaFeatures(client))
-
