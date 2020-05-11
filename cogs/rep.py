@@ -122,10 +122,9 @@ class Rep(commands.Cog):
             self.repboard.reset_cooldown(ctx)
         if not await self.rep_cog_on(ctx):
             return
-        turnip_emoji = self.client.get_emoji(694822764699320411)
+        # turnip_emoji = self.client.get_emoji(694822764699320411)
 
         array = {}
-        print(1)
         for member in ctx.guild.members:
             if member.bot:
                 continue
@@ -449,7 +448,7 @@ class Rep(commands.Cog):
     async def on_command_error(self, ctx, error):
         prefix = await self.prefix(ctx)
         if isinstance(error, commands.BadArgument):
-            await ctx.channel.purge(limit=1)
+            await ctx.message.delete()
             msg = f'{error}.\n'\
                   f'To add a negative review, please use `{prefix}neg @member message` '\
                   f'where `@member` can be a user mention, user ID, or the username in quotes. '\
@@ -457,10 +456,14 @@ class Rep(commands.Cog):
             await ctx.send(embed=tools.single_embed_tooltip(msg))
 
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.channel.purge(limit=1)
+            await ctx.message.delete()
             msg = f'You appear to be missing the `{error.param.name}` argument required for this command.\n' \
                   f'Please use `{prefix}neg @member message` for positive reviews. **Messages are required.**'
             await ctx.send(embed=tools.single_embed_tooltip(msg))
+
+        if isinstance(error, commands.CommandOnCooldown):
+            await ctx.message.delete()
+            # await ctx.send(embed=tools.single_embed_tooltip(f'You\'re doing that too fast!\n{error}'))
 
     @add.error
     async def on_command_error(self, ctx, error):
