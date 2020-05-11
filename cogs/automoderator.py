@@ -74,6 +74,15 @@ class Automoderator(commands.Cog):
         # ask for a channel to post in
 
     @commands.Cog.listener()
+    async def on_member_update(self, before, after):
+        if before.display_name == after.display_name:
+            return
+        nicknames = [n[0] for n in database.get_member_nick_history(before)]
+        if after.display_name in nicknames:
+            return
+        database.add_member_nick_history(before, after.display_name)
+
+    @commands.Cog.listener()
     async def on_member_join(self, member):
         # find server stats channel
         try:
@@ -83,19 +92,17 @@ class Automoderator(commands.Cog):
         except Exception as e:
             print(e)
             pass
-        if tools.to_seconds(member.created_at) < 86400 and member.premium_since is None:
+
+        one_day = 86400
+        eight_hours = 28800
+        if tools.to_seconds(member.created_at) < eight_hours and member.premium_since is None:
             # if member.id == 702834544373530735:
             review = self.client.get_channel(707917383628619888)
-            msg = f'{member.mention} has been flagged as a new account without Nitro. Please review this user.'
+            msg = f'{member.mention} has been flagged as a new account. Please review this user.'
             embed = discord.Embed(description=msg, color=discord.Color.red())
             embed.set_thumbnail(url=member.avatar_url)
             embed.add_field(name='Joined Discord', value=member.created_at, inline=False)
             embed.add_field(name='Joined Server', value=member.joined_at, inline=False)
-            if member.premium_since is not None:
-                premium = 'Yes'
-            else:
-                premium = 'No'
-            embed.add_field(name='Nitro', value=premium)
             await review.send(embed=embed)
 
         await self.member_join_tutorial(member)
@@ -167,6 +174,8 @@ class Automoderator(commands.Cog):
         if message is None:
             return
         if not database.admin_cog(message.guild):
+            return
+        if message.channel.id == 700538064224780298:
             return
         spam = database.get_spam(message.guild)
         if message.author.bot:
@@ -618,7 +627,7 @@ class Automoderator(commands.Cog):
                     return
 
                 try:
-                    msg = f'Great! If there is a problem with your in-game name, you can ask a moderator to fix it later. So, now, ' \
+                    msg = f'Great! If there is a problem with your in-game name, you can ask a moderator to fix it later. So, ' \
                           f'what is your Island :island: name? *characters left: {26 - (len(displayname) + len(ign))}*'
                     embed = tut_embed(msg)
                     await tutorial.send(embed=embed)
@@ -670,11 +679,24 @@ class Automoderator(commands.Cog):
             prompt = await tutorial.send(embed=embed)
             await prompt.add_reaction('✅')
             await prompt.add_reaction('❌')
-            reaction, member = await self.client.wait_for('reaction_add', check=check_react, timeout=600)
-            if reaction.emoji == '✅':
-                break
-            elif reaction.emoji == '❌':
-                pass
+            try:
+                reaction, member = await self.client.wait_for('reaction_add', check=check_react, timeout=600)
+                if reaction.emoji == '✅':
+                    break
+                elif reaction.emoji == '❌':
+                    pass
+            except asyncio.TimeoutError:
+                msg = 'Unfortunately, your prompt has timed out. To keep everything flowing, the channel will be closed, ' \
+                      'and you will be kicked. Please join again to retry.'
+                embed = tut_embed(msg, thumb=True)
+                await tutorial.send(embed=embed)
+                await asyncio.sleep(20)
+                await member.kick()
+                try:
+                    await tutorial.delete()
+                except discord.NotFound:
+                    pass
+                return
 
         member_role = member.guild.get_role(694016677616156692)
         await member.add_roles(member_role)
@@ -706,7 +728,6 @@ class Automoderator(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def spam_reset(self):
-        # print(datetime.now())
         try:
             global mention_counter
             global attachment_counter
