@@ -496,6 +496,8 @@ class Queue(commands.Cog):
             except Exception as e:
                 print(f'Nook session error: {e}')
 
+        await prompt.clear_reactions()
+
         # write data
         groups = {}
         for i in range(max_groups):
@@ -714,6 +716,8 @@ class Queue(commands.Cog):
                 await private_session.delete()
                 return
 
+        await prompt.clear_reactions()
+
         # write data
         groups = {}
         for i in range(max_groups):
@@ -889,6 +893,8 @@ class Queue(commands.Cog):
                 await private_session.send(embed=tools.single_embed('Quitting'))
                 await private_session.delete()
                 return
+
+        await prompt.clear_reactions()
 
         # write data
         groups = {}
@@ -1194,9 +1200,13 @@ class Queue(commands.Cog):
 
     async def add_group(self, host):
         session_code = await self.get_session_code(host)
-        last_place = int(list(self.sessions[session_code]['groups'].keys())[-1])
-        last_place += 1
-        self.sessions[session_code]['groups'][last_place] = []
+        if len(self.sessions[session_code]['groups']) >= 20:
+            return False
+        else:
+            last_place = int(list(self.sessions[session_code]['groups'].keys())[-1])
+            last_place += 1
+            self.sessions[session_code]['groups'][last_place] = []
+            return True
 
     async def notify_guests(self, host):
         def check_msg(m):
@@ -1503,7 +1513,11 @@ class Queue(commands.Cog):
                     await self.show_queue(user, emoji)
 
                 if emoji == reactions[7]:
-                    await self.add_group(user)
+                    group_added = await self.add_group(user)
+                    if not group_added:
+                        private_channel = await self.get_session_channel(user)
+                        msg = 'You cannot have more than 20 groups at a time.'
+                        await private_channel.send(embed=tools.single_embed(msg), delete_after=5)
                     await self.show_queue(user, emoji)
 
                 if emoji == reactions[8]:
@@ -1559,7 +1573,7 @@ class Queue(commands.Cog):
                                       f'bot-commands channel to leave any sessions you have joined.\n' \
                                       f'__You will receive the host\'s Dodo Code when your group is called.__'
                                 await user.send(embed=tools.single_embed(msg))
-                                msg = f'**{user.mention}** has joined **Group {place}**.'
+                                msg = f'**{user.display_name}** has joined **Group {place}**.'
                                 dms = self.client.get_channel(self.sessions[session_code]['private_session'])
                                 await dms.send(embed=tools.single_embed(msg), delete_after=5)
                                 host = discord.utils.get(guild.members, id=int(session_code))
