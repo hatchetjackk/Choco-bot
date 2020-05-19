@@ -13,47 +13,9 @@ class Rep(commands.Cog):
     def __init__(self, client):
         self.client = client
 
-    async def can_bypass_cooldown(self, ctx):
-        if ctx.author.permissions_in(ctx.channel).administrator:
-            return True
-        elif await self.client.is_owner(ctx.author):
-            return True
-        return False
-
-    @staticmethod
-    async def prefix(ctx):
-        return database.get_prefix(ctx.guild)[0]
-
-    @staticmethod
-    async def rep_cog_on(ctx):
-        if database.rep_cog(ctx.guild):
-            return True
-        msg = f'**Rep** is not turned on'
-        await ctx.send(embed=tools.single_embed_neg(msg))
-        return False
-
-    @commands.command()
-    async def bug(self, ctx, *, message: str):
-        """
-        Send a bug report
-        :param ctx:
-        :param message:
-        :return:
-        """
-        msg = f'A bug report was filed by **{ctx.author.display_name}**.\n**Message**: {message}'
-        if len(ctx.message.attachments) > 0:
-            msg += '\n' + ctx.message.attachments[0].url
-        channels = [c for c in ctx.guild.channels if 'bug-reports']
-        chan = None
-        for c in channels:
-            if 'bug-report' in c.name:
-                chan = c
-        if chan is not None:
-            await chan.send(embed=tools.single_embed_neg(msg, avatar=ctx.author.avatar_url))
-        else:
-            owner = self.client.get_user(193416878717140992)
-            await owner.send(msg)
-        await ctx.send(embed=tools.single_embed_neg(f'Your report has been sent. Thank you.'))
+    """
+    Reputation Commands
+    """
 
     @commands.command(aliases=['r'])
     @commands.cooldown(2, 30, commands.BucketType.user)
@@ -110,90 +72,6 @@ class Rep(commands.Cog):
         embed = discord.Embed(title=f'{member.display_name}', color=member.color, description=msg)
         embed.set_image(url=mae_banner)
         embed.set_thumbnail(url=member.avatar_url)
-        await ctx.send(embed=embed)
-
-    @commands.command(aliases=['reviewers', 'reviews'])
-    @commands.cooldown(2, 30, commands.BucketType.user)
-    async def top_reviewers(self, ctx):
-        """ return a leaderboard with the top 10 karma leaders. If the requesting member is not in the top 10,
-        their place will be added to the bottom of the leaderboard
-        """
-        if await self.can_bypass_cooldown(ctx):
-            self.repboard.reset_cooldown(ctx)
-        if not await self.rep_cog_on(ctx):
-            return
-        # turnip_emoji = self.client.get_emoji(694822764699320411)
-
-        array = {}
-        for member in ctx.guild.members:
-            if member.bot:
-                continue
-            if not database.in_members_table(member):
-                database.add_member(member)
-            reviews_given = database.get_reviews_given(member)
-            array[member.display_name] = reviews_given
-
-        # sort users by most to least rep
-        counter = 1
-        leaderboard = []
-        append_author = ''
-        sorted_rep = OrderedDict(reversed(sorted(array.items(), key=lambda x: x[1])))
-        for member, reviews in sorted_rep.items():
-            reviewer_rank = await tools.get_reviewer_rank(reviews)
-            msg = f'{counter}: **{member}** (*{reviewer_rank}*) - `{reviews}` points '
-            leaderboard.append(msg)
-            if ctx.author.display_name == member and counter > 10:
-                append_author = f'\n----------------\n{counter}: **{member}** (*{reviewer_rank}*) - `{reviews}` points '
-            counter += 1
-
-        embed = discord.Embed(color=discord.Color.blue())
-        embed.add_field(name=f'Top Reviewers :star:', value='\n'.join(leaderboard[:10]) + append_author)
-        embed.set_image(url=mae_banner)
-        # embed.set_thumbnail(url="https://i.imgur.com/wl2MZIV.png")
-        await ctx.send(embed=embed)
-
-    @commands.command(aliases=['rboard'])
-    @commands.cooldown(2, 30, commands.BucketType.user)
-    async def repboard(self, ctx):
-        """ return a leaderboard with the top 10 karma leaders. If the requesting member is not in the top 10,
-        their place will be added to the bottom of the leaderboard
-        """
-        if await self.can_bypass_cooldown(ctx):
-            self.repboard.reset_cooldown(ctx)
-        if not await self.rep_cog_on(ctx):
-            return
-        turnip_emoji = self.client.get_emoji(694822764699320411)
-
-        array = {}
-        top_ten = database.top_ten_rep(ctx.guild)
-        for (uid, pos, neg) in top_ten:
-            member = discord.utils.get(ctx.guild.members, id=uid)
-            if member is None:
-                pass
-            else:
-                array[member.display_name] = pos
-
-        # sort users by most to least rep
-        counter = 1
-        leaderboard = []
-        append_author = ''
-        medals = {1: ' :first_place:', 2: ' :second_place:', 3: ' :third_place:'}
-        sorted_rep = OrderedDict(reversed(sorted(array.items(), key=lambda x: x[1])))
-        for member, rep in sorted_rep.items():
-            msg = f'{counter}: **{member}** - `{rep}` points'
-            for k, v in medals.items():
-                if counter == k:
-                    msg = msg + v
-            leaderboard.append(msg)
-            counter += 1
-        if ctx.author.display_name not in array:
-            pos, neg, index = database.get_rep_position(ctx.author)
-            append_author = f'\n----------------\n{index}: **{ctx.author.display_name}** - `{pos}` points'
-
-        embed = discord.Embed(color=discord.Color.blue())
-        embed.add_field(name=f'Rep Leaderboard {turnip_emoji}', value='\n'.join(leaderboard[:10]) + append_author)
-        embed.set_image(url=mae_banner)
-        embed.set_thumbnail(url="https://i.imgur.com/wl2MZIV.png")
         await ctx.send(embed=embed)
 
     @commands.command(aliases=['p'])
@@ -325,6 +203,10 @@ class Rep(commands.Cog):
         await ctx.send(embed=tools.single_embed_neg(msg), delete_after=30)
         await ctx.message.delete()
 
+    """
+    Administrative Reputation Commands
+    """
+
     @commands.command()
     @commands.has_permissions(kick_members=True)
     async def add(self, ctx, method, member: discord.Member, points: int, *, message: str = None):
@@ -402,6 +284,117 @@ class Rep(commands.Cog):
                                      f'{member.display_name}\'s original score was {pos} pos and {neg} neg.\n'
                                      f'Log: {message}'))
 
+    """
+    Leaderboard Commands
+    """
+
+    @commands.command(aliases=['reviewers', 'reviews'])
+    @commands.cooldown(2, 30, commands.BucketType.user)
+    async def top_reviewers(self, ctx):
+        """ return a leaderboard with the top 10 karma leaders. If the requesting member is not in the top 10,
+        their place will be added to the bottom of the leaderboard
+        """
+        if await self.can_bypass_cooldown(ctx):
+            self.repboard.reset_cooldown(ctx)
+        if not await self.rep_cog_on(ctx):
+            return
+        # turnip_emoji = self.client.get_emoji(694822764699320411)
+
+        array = {}
+        for member in ctx.guild.members:
+            if member.bot:
+                continue
+            if not database.in_members_table(member):
+                database.add_member(member)
+            reviews_given = database.get_reviews_given(member)
+            array[member.display_name] = reviews_given
+
+        # sort users by most to least rep
+        counter = 1
+        leaderboard = []
+        append_author = ''
+        sorted_rep = OrderedDict(reversed(sorted(array.items(), key=lambda x: x[1])))
+        for member, reviews in sorted_rep.items():
+            reviewer_rank = await tools.get_reviewer_rank(reviews)
+            msg = f'{counter}: **{member}** (*{reviewer_rank}*) - `{reviews}` points '
+            leaderboard.append(msg)
+            if ctx.author.display_name == member and counter > 10:
+                append_author = f'\n----------------\n{counter}: **{member}** (*{reviewer_rank}*) - `{reviews}` points '
+            counter += 1
+
+        embed = discord.Embed(color=discord.Color.blue())
+        embed.add_field(name=f'Top Reviewers :star:', value='\n'.join(leaderboard[:10]) + append_author)
+        embed.set_image(url=mae_banner)
+        # embed.set_thumbnail(url="https://i.imgur.com/wl2MZIV.png")
+        await ctx.send(embed=embed)
+
+    @commands.command(aliases=['rboard'])
+    @commands.cooldown(2, 30, commands.BucketType.user)
+    async def repboard(self, ctx):
+        """ return a leaderboard with the top 10 karma leaders. If the requesting member is not in the top 10,
+        their place will be added to the bottom of the leaderboard
+        """
+        if await self.can_bypass_cooldown(ctx):
+            self.repboard.reset_cooldown(ctx)
+        if not await self.rep_cog_on(ctx):
+            return
+        turnip_emoji = self.client.get_emoji(694822764699320411)
+
+        array = {}
+        top_ten = database.top_ten_rep(ctx.guild)
+        for (uid, pos, neg) in top_ten:
+            member = discord.utils.get(ctx.guild.members, id=uid)
+            if member is None:
+                pass
+            else:
+                array[member.display_name] = pos
+
+        # sort users by most to least rep
+        counter = 1
+        leaderboard = []
+        append_author = ''
+        medals = {1: ' :first_place:', 2: ' :second_place:', 3: ' :third_place:'}
+        sorted_rep = OrderedDict(reversed(sorted(array.items(), key=lambda x: x[1])))
+        for member, rep in sorted_rep.items():
+            msg = f'{counter}: **{member}** - `{rep}` points'
+            for k, v in medals.items():
+                if counter == k:
+                    msg = msg + v
+            leaderboard.append(msg)
+            counter += 1
+        if ctx.author.display_name not in array:
+            pos, neg, index = database.get_rep_position(ctx.author)
+            append_author = f'\n----------------\n{index}: **{ctx.author.display_name}** - `{pos}` points'
+
+        embed = discord.Embed(color=discord.Color.blue())
+        embed.add_field(name=f'Rep Leaderboard {turnip_emoji}', value='\n'.join(leaderboard[:10]) + append_author)
+        embed.set_image(url=mae_banner)
+        embed.set_thumbnail(url="https://i.imgur.com/wl2MZIV.png")
+        await ctx.send(embed=embed)
+
+    """
+    Utility Functions
+    """
+
+    async def can_bypass_cooldown(self, ctx):
+        if ctx.author.permissions_in(ctx.channel).administrator:
+            return True
+        elif await self.client.is_owner(ctx.author):
+            return True
+        return False
+
+    @staticmethod
+    async def prefix(ctx):
+        return database.get_prefix(ctx.guild)[0]
+
+    @staticmethod
+    async def rep_cog_on(ctx):
+        if database.rep_cog(ctx.guild):
+            return True
+        msg = f'**Rep** is not turned on'
+        await ctx.send(embed=tools.single_embed_neg(msg))
+        return False
+
     @staticmethod
     async def assign_new_role(member: discord.Member):
         # send new role notifications to general
@@ -427,6 +420,10 @@ class Rep(commands.Cog):
                     await member.add_roles(role)
                     await chan.send(embed=tools.single_embed(f':tada: {member.mention} has earned the **{role}** role!'))
 
+    """
+    Error Handling
+    """
+
     @pos.error
     async def on_command_error(self, ctx, error):
         prefix = await self.prefix(ctx)
@@ -436,12 +433,12 @@ class Rep(commands.Cog):
                   f'where `@member` can be a user mention, user ID, or the username in quotes. '\
                   f'Messages are optional.'
             await ctx.send(embed=tools.single_embed_tooltip(msg))
-            msg = f'{ctx.author.display_name} encountered a {type(error)} error running {ctx.command} in {ctx.channel.name}: {error}'
-            print(msg)
-
         if isinstance(error, commands.MissingRequiredArgument):
             msg = f'You appear to be missing the `{error.param.name}` argument required for this command. ' \
                   f'Please use `{prefix}pos @member message` for positive reviews. Messages are optional.'
+            await ctx.send(embed=tools.single_embed_tooltip(msg))
+        if isinstance(error, commands.CommandOnCooldown):
+            msg = f'You\'re doing that too fast! Consider using the `mpos` command instead. \n{error}'
             await ctx.send(embed=tools.single_embed_tooltip(msg))
 
     @neg.error
@@ -454,16 +451,13 @@ class Rep(commands.Cog):
                   f'where `@member` can be a user mention, user ID, or the username in quotes. '\
                   f'**Messages are required.**'
             await ctx.send(embed=tools.single_embed_tooltip(msg))
-
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.message.delete()
             msg = f'You appear to be missing the `{error.param.name}` argument required for this command.\n' \
                   f'Please use `{prefix}neg @member message` for positive reviews. **Messages are required.**'
             await ctx.send(embed=tools.single_embed_tooltip(msg))
-
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.message.delete()
-            # await ctx.send(embed=tools.single_embed_tooltip(f'You\'re doing that too fast!\n{error}'))
 
     @add.error
     async def on_command_error(self, ctx, error):
@@ -471,12 +465,6 @@ class Rep(commands.Cog):
         if isinstance(error, commands.MissingRequiredArgument):
             msg = f'You appear to be missing the `{error.param.name}` argument required for this command. ' \
                   f'Please use `{prefix}add pos/neg @member points message`. Messages are optional.'
-            await ctx.send(embed=tools.single_embed_tooltip(msg))
-
-    @bug.error
-    async def on_command_error(self, ctx, error):
-        if isinstance(error, commands.MissingRequiredArgument):
-            msg = f'Please enter a message for the bug report.'
             await ctx.send(embed=tools.single_embed_tooltip(msg))
 
     @sub.error
