@@ -4,12 +4,25 @@ import util.tools as tools
 import urllib.request
 import urllib.parse
 import re
+import aiohttp
 from discord.ext import commands
 
 
 class Fun(commands.Cog):
     def __init__(self, client):
         self.client = client
+
+    @commands.command()
+    async def gif(self, ctx, *, query):
+        async with aiohttp.ClientSession() as cs:
+            q = f"https://api.giphy.com/v1/gifs/search?api_key=mAOI8C4Eu2yq6ez7kb3NNp19q07owL9M&q={query}&limit=25&offset=0&rating=G&lang=en"
+            async with cs.get(q) as r:
+                f = await r.json()
+        data = f["data"]
+        url = data[random.randint(0, len(data) - 1)]["images"]["original"]["url"]
+        embed = discord.Embed(colour=discord.Color.green())
+        embed.set_image(url=url)
+        await ctx.send(embed=embed)
 
     @commands.command(aliases=['in'])
     async def inspire(self, ctx):
