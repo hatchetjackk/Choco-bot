@@ -6,10 +6,9 @@ from discord.ext import commands
 rep_cmds = ['rep', 'pos', 'mpos', 'neg', 'repboard', 'karma', 'karmaboard', 'top_reviewers']
 dms_cmds = ['create', 'leave', 'queue']
 fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd', 'who', 'guild', 'pfp', 'find']
-adm_cmds = ['settings', 'prefix', 'spam', 'admin_channel', 'autorole', 'add', 'sub', 'reset', 'warn',
-            'warnings', 'clear_warnings', 'kick', 'ban', 'purge', 'clm', 'blacklist', 'get_blacklist',
-            'delete_blacklist', 'role', 'archive']
-misc_cmds = ['bug', 'nick', 'afk', 'report']
+adm_cmds = ['settings', 'prefix', 'spam', 'reputation', 'disciplinary', 'admin_channel', 'purge', 'clm', 'blacklist',
+            'get_blacklist', 'delete_blacklist', 'selfrole', 'autorole', 'role', 'archive', 'messages']
+misc_cmds = ['bug', 'nick', 'afk', 'report', 'support']
 dev_cmds = ['reboot', 'reload', 'load']
 
 
@@ -98,6 +97,18 @@ class Help(commands.Cog):
         await ctx.send(embed=embed)
 
     """ misc commands """
+
+    @help_page.group(aliases=['ticket'])
+    async def support(self, ctx):
+        args = 'tech/ingame/server message'
+        description = f'Submit a support ticket for help with the related topic.\n' \
+                      f'Mae-Bot: submit a ticket with `support tech \'your message\'`.\n' \
+                      f'aliases: `bot`, `technical`\n' \
+                      f'ACNH: submit a ticket with `support acnh \'your message\'`.\n' \
+                      f'aliases: `ingame`, `ig`\n' \
+                      f'Server: submit a ticket with `support server \'your message\'`.\n' \
+                      f''
+        await self.help2_embed(ctx, args, description, aliases=self.support.aliases)
 
     @help_page.group()
     async def report(self, ctx):
@@ -286,6 +297,19 @@ class Help(commands.Cog):
         await self.help_embed(ctx, title=f'{func.capitalize()} Help Page', description=help_menu, footer=footer)
 
     @help_page.group()
+    async def messages(self, ctx):
+        args = '@user #channel num'
+        description = 'Get the last (num) messages for the @user in #channel.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    async def reputation(self, ctx):
+        args = None
+        description = 'Mae-Bot manages reputation. Mods and admins can correct rep with the following commands:\n' \
+                      '`add`, `sub`, and `reset`. Please use the `help` command to see how to use them.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
     async def clm(self, ctx):
         args = '@user int'
         description = 'Clear `int` number of messages from a user in the current channel. This does not work if a user ' \
@@ -366,11 +390,28 @@ class Help(commands.Cog):
         await self.help2_embed(ctx, args, description)
 
     @help_page.group()
+    @commands.has_permissions(administrator=True)
+    async def selfrole(self, ctx):
+        args = '@role message'
+        description = 'Create a message that automatically gives a user a role when they use the reaction.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
     @commands.has_permissions(kick_members=True)
     async def warn(self, ctx):
         args = '@user message'
         description = 'Give a member a warning for misconduct. When the member reaches ' \
                       f'two or more warnings, a "vote to kick" dialogue will appear in the administrative channel.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    @commands.has_permissions(kick_members=True)
+    async def disciplinary(self, ctx):
+        args = None
+        description = 'Managing negative behavior is done with warnings, kicks, and bans. Some warnings are automatic ' \
+                      'while others have to be given by the Mod and Admin teams. Disciplinary commands include: \n' \
+                      '`warnings`, `warn`, `clear_warnings`, `kick`, `ban`\n' \
+                      'Use the `help` command for more information on each command.'
         await self.help2_embed(ctx, args, description)
 
     @help_page.group()
