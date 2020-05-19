@@ -3,6 +3,7 @@ import json
 import discord
 import util.tools as tools
 import util.db as db
+from datetime import datetime
 from discord.ext import commands, tasks
 
 
@@ -27,13 +28,29 @@ class Queue(commands.Cog):
         print('sessions overwritten')
 
     @commands.command()
-    @commands.is_owner()
-    async def remove_code(self, ctx, session_code):
+    @commands.has_permissions(manage_channels=True)
+    async def pop_session(self, ctx, session_code):
         try:
             del self.sessions[session_code]
             await ctx.send(embed=tools.single_embed('Session removed.'))
         except KeyError:
             await ctx.send(embed=tools.single_embed('Session not found.'))
+        await self.write_session()
+
+    @commands.command()
+    @commands.has_permissions(manage_channels=True)
+    async def end_session(self, ctx, session_code):
+        try:
+            channel = self.client.get_channel(int(self.sessions[session_code]['private_session']))
+            await channel.delete()
+        except discord.NotFound:
+            await ctx.send(embed=tools.single_embed('Session not found.'))
+        try:
+            del self.sessions[session_code]
+            await ctx.send(embed=tools.single_embed('Session removed.'))
+        except KeyError:
+            await ctx.send(embed=tools.single_embed('Session not found.'))
+        await self.write_session()
 
     @commands.command(aliases=['reload-queue'])
     @commands.is_owner()
@@ -215,8 +232,9 @@ class Queue(commands.Cog):
                     try:
                         await prompt.edit(embed=tools.single_embed('Your request has timed out.'), delete_after=10)
                         await prompt.clear_reactions()
+                        return
                     except discord.NotFound:
-                        pass
+                        return
 
     @commands.command()
     async def queue(self, ctx):
@@ -521,6 +539,7 @@ class Queue(commands.Cog):
             "open": True
         }
 
+        await self.write_session()
         await self.show_queue(host=ctx.author)
 
     async def daisymae(self, ctx, private_session, notification, prompt):
@@ -741,7 +760,7 @@ class Queue(commands.Cog):
             "history": [],
             "open": True
         }
-
+        await self.write_session()
         await self.show_queue(host=ctx.author)
 
     async def other_session(self, ctx, private_session, notification, prompt):
@@ -921,6 +940,7 @@ class Queue(commands.Cog):
             "open": True
         }
 
+        await self.write_session()
         await self.show_queue(host=ctx.author)
 
     """ 
@@ -1109,7 +1129,7 @@ class Queue(commands.Cog):
                             members.append(member.display_name)
                     embed.add_field(name='🏝️ On Island', value='\n'.join(members), inline=False)
         except Exception as e:
-            print(e)
+            print(f'show island error {e}')
             pass
         if len(groups.items()) < 1:
             embed.add_field(name=f'There are no groups in your queue', value='\u200b')
@@ -1133,10 +1153,10 @@ class Queue(commands.Cog):
                     place = f'Group {place} ({len(members)}/{per_group})'
                 embed.add_field(name=f'{place}', value=group)
             try:
-                if len(groups) % 2 != 0:
+                if len(groups) % 3 != 0:
                     embed.add_field(name='\u200b', value='\u200b')
             except Exception as e:
-                print(e)
+                print(f'even groups error {e}')
                 pass
 
         send = '➡ Send next group'
@@ -1168,6 +1188,7 @@ class Queue(commands.Cog):
         embed.add_field(name='\u200b', value=options1)
         embed.add_field(name='\u200b', value=options2)
         embed.add_field(name='\u200b', value=options3)
+        embed.set_footer(text=f'Last updated {datetime.now()}')
 
         # edit queue in place if not exists
         queue_id = self.sessions[session_code]['queue_id']
@@ -1185,8 +1206,11 @@ class Queue(commands.Cog):
         self.sessions[session_code]['queue_id'] = queue.id
 
         reactions = ['➡', '⏹', '⏯', '🔁', '🥾', '🚫', '📜', '💬', '➕']
-        for r in reactions:
-            await queue.add_reaction(r)
+        try:
+            for r in reactions:
+                await queue.add_reaction(r)
+        except discord.NotFound as e:
+            await self.print_error(e)
 
         # await self.write_session()
 
@@ -1202,6 +1226,8 @@ class Queue(commands.Cog):
         session_code = await self.get_session_code(host)
         if len(self.sessions[session_code]['groups']) >= 20:
             return False
+        elif len(self.sessions[session_code]['groups']) < 1:
+            self.sessions[session_code]['groups']['1'] = []
         else:
             last_place = int(list(self.sessions[session_code]['groups'].keys())[-1])
             last_place += 1
@@ -1225,6 +1251,15 @@ class Queue(commands.Cog):
 
             groups = self.sessions[session_code]['groups']
             could_not_reach = []
+            for uid in self.sessions[session_code]["on_island"]:
+                try:
+                    member = self.client.get_user(uid)
+                    msg = f'You\'ve received a message from your Session host **{host.display_name}**:\n' \
+                          f'> "{message}"'
+                    await member.send(embed=tools.single_embed(msg, avatar=self.client.user.avatar_url))
+                except discord.Forbidden:
+                    could_not_reach.append(self.client.get_user(uid))
+                    print(f'{host} could not send a message to {self.client.get_user(uid)}')
             for place, member_list in groups.items():
                 for uid in member_list:
                     try:
@@ -1250,16 +1285,20 @@ class Queue(commands.Cog):
         def check_msg(m):
             return m.author == host and m.channel == private_channel
 
-        for session_code, value in self.sessions.items():
-            if int(session_code) == host.id:
-                private_channel = await self.get_session_channel(host)
-                embed = discord.Embed(title='Please enter your new Dodo Code', color=discord.Color.green())
-                prompt = await private_channel.send(embed=embed)
-                msg = await self.client.wait_for('message', check=check_msg)
-                self.sessions[session_code]['dodo_code'] = msg.content.upper()
-                await private_channel.purge(limit=1)
-                msg = f'Your code has been changed to **{self.sessions[session_code]["dodo_code"]}**'
-                await prompt.edit(embed=tools.single_embed(msg), delete_after=5)
+        private_channel = await self.get_session_channel(host)
+        embed = discord.Embed(title='Please enter your new Dodo Code', color=discord.Color.green())
+        prompt = await private_channel.send(embed=embed)
+        msg = await self.client.wait_for('message', check=check_msg)
+        try:
+            for session_code, value in self.sessions.items():
+                if int(session_code) == host.id:
+                    self.sessions[session_code]['dodo_code'] = msg.content.upper()
+                    await private_channel.purge(limit=1)
+                    msg = f'Your code has been changed to **{self.sessions[session_code]["dodo_code"]}**'
+                    await prompt.edit(embed=tools.single_embed(msg), delete_after=5)
+        except RuntimeError:
+            msg = f'Your code was unable to be changed. Please try again.'
+            await prompt.edit(embed=tools.single_embed(msg), delete_after=5)
 
     async def guest_kick(self, host):
         session_code = await self.get_session_code(host)
@@ -1330,7 +1369,7 @@ class Queue(commands.Cog):
                                 self.sessions[session_code]['groups'][place].remove(uid)
                                 to_kick.remove(kicked_member)
                             except ValueError as e:
-                                print(e)
+                                print(f'kick member error {e}')
                 msg = f'Member **{member_kick.mention}** kicked from session.'
                 await private_channel.send(embed=tools.single_embed(msg), delete_after=5)
 
@@ -1414,7 +1453,7 @@ class Queue(commands.Cog):
                                 self.sessions[session_code]['ban_list'].append(uid)
                                 to_ban.remove(kicked_member)
                             except ValueError as e:
-                                print(e)
+                                print(f'guest ban error {e}')
                 msg = f'Member **{member_kick.mention}** banned from session.'
                 await private_channel.send(embed=tools.single_embed(msg), delete_after=5)
 
@@ -1491,6 +1530,7 @@ class Queue(commands.Cog):
                             return
                         if reaction.emoji == '🇳':
                             await confirm.delete()
+                            await self.show_queue(user, emoji)
 
                 if emoji == reactions[2]:
                     await self.pause(user)
@@ -1552,7 +1592,13 @@ class Queue(commands.Cog):
 
                     _open = self.sessions[session_code]['open']
                     if not _open:
-                        await user.send(embed=tools.single_embed(f'This session is currently closed to new guests.'))
+                        try:
+                            await user.send(embed=tools.single_embed(f'This session is currently closed to new guests.'))
+                        except discord.Forbidden:
+                            channel = self.client.get_channel(id=payload.channel_id)
+                            msg = f'{user.mention}: This session is currently closed to new guests. Please consider ' \
+                                  f'opening your DMs so you may receive these messages directly.'
+                            await channel.send(embed=tools.single_embed(msg), delete_after=10)
                         return
 
                     for place, group in self.sessions[session_code]['groups'].items():
@@ -1566,13 +1612,20 @@ class Queue(commands.Cog):
                         try:
                             if len(group) < members_per_group:
                                 group.append(user.id)
-                                prefix = await self.show_prefix(guild)
-                                msg = f'You have joined session **{session_code}**!\n' \
-                                      f'Your group number is **{place}**\n' \
-                                      f'You can use `{prefix}queue` to view your sessions or `{prefix}leave` in the ' \
-                                      f'bot-commands channel to leave any sessions you have joined.\n' \
-                                      f'__You will receive the host\'s Dodo Code when your group is called.__'
-                                await user.send(embed=tools.single_embed(msg))
+                                try:
+                                    prefix = await self.show_prefix(guild)
+                                    msg = f'You have joined session **{session_code}**!\n' \
+                                          f'Your group number is **{place}**\n' \
+                                          f'You can use `{prefix}queue` to view your sessions or `{prefix}leave` in the ' \
+                                          f'bot-commands channel to leave any sessions you have joined.\n' \
+                                          f'__You will receive the host\'s Dodo Code when your group is called.__'
+                                    await user.send(embed=tools.single_embed(msg))
+                                except discord.Forbidden:
+                                    channel = self.client.get_channel(payload.channel_id)
+                                    msg = f'{user.mention}: You cannot use Mae-Bot without opening your DMs.'
+                                    await channel.send(msg, delete_after=10)
+                                    group.remove(user.id)
+                                    return
                                 msg = f'**{user.display_name}** has joined **Group {place}**.'
                                 dms = self.client.get_channel(self.sessions[session_code]['private_session'])
                                 await dms.send(embed=tools.single_embed(msg), delete_after=5)
@@ -1585,10 +1638,28 @@ class Queue(commands.Cog):
                     await user.send(embed=tools.single_embed(f'Sorry, the Session you are trying to join is full.'))
 
     # noinspection PyCallingNonCallable
-    @tasks.loop(seconds=15)
+    @tasks.loop(seconds=30)
     async def loop_session(self):
-        with open('sessions/sessions.json', 'w') as f:
-            json.dump(self.sessions, f, indent=4)
+        attempts = 0
+        while attempts <= 3:
+            try:
+                with open('sessions/sessions.json', 'w') as f:
+                    json.dump(self.sessions, f, indent=4)
+                break
+            except Exception as e:
+                print(f'Encountered an issue writing to sessions: {e}')
+                attempts += 1
+                await asyncio.sleep(1)
+
+    """
+    Error Handling
+    """
+
+    @staticmethod
+    async def print_error(error):
+        import inspect
+        msg = f'{datetime.now().strftime("%I:%M:%S %p")}\tCommand [{inspect.stack()[1][3]}] Triggered an error: {error}'
+        print(msg)
 
 
 def setup(client):
