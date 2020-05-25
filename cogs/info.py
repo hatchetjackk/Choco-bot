@@ -32,6 +32,22 @@ class Information(commands.Cog):
     Information Commands
     """
 
+    @commands.command(aliases=['sw-set'])
+    async def sw_set(self, ctx, code: str):
+        with open('files/sw.json', 'r') as f:
+            data = json.load(f)
+        data[str(ctx.author.id)] = code.upper()
+        with open('files/sw.json', 'w') as f:
+            json.dump(data, f, indent=4)
+        await ctx.send(embed=tools.single_embed(f'{ctx.author.display_name}\'s friend code has been set to **{code.upper()}**'))
+
+    @commands.command(aliases=['sw-get'])
+    async def sw_get(self, ctx):
+        with open('files/sw.json', 'r') as f:
+            data = json.load(f)
+        sw = data[str(ctx.author.id)]
+        await ctx.send(embed=tools.single_embed(f'{ctx.author.display_name}\'s friend code is **{sw}**'))
+
     @commands.command()
     @commands.cooldown(5, 60, commands.BucketType.user)
     async def guild(self, ctx):
@@ -92,8 +108,12 @@ class Information(commands.Cog):
         if await self.can_bypass_cooldown(ctx):
             self.who.reset_cooldown(ctx)
 
-        embed = discord.Embed(title=f'{member.display_name}', color=member.colour,
-                              description=f'{member}, {member.mention}')
+        description = f'{member}, {member.mention}'
+        one_week = 604800
+
+        if tools.to_seconds(member.joined_at) < one_week:
+            description = '🌱 ' + description
+        embed = discord.Embed(title=f'{member.display_name}', color=member.colour, description=description)
         embed.add_field(name='ID', value=member.id)
         embed.add_field(name='Status', value=member.status)
         if member.activity is not None:
@@ -115,6 +135,11 @@ class Information(commands.Cog):
         embed.set_footer(text=f'Joined Discord {tools.format_date(member.joined_at)}')
         embed.set_thumbnail(url=member.avatar_url)
         await ctx.send(embed=embed)
+
+    @commands.command()
+    @commands.cooldown(5, 60, commands.BucketType.user)
+    async def profile(self, ctx, member: discord.Member):
+        return
 
     """
     Reporting Commands
@@ -201,8 +226,10 @@ class Information(commands.Cog):
     @commands.group(aliases=['ticket'])
     async def support(self, ctx):
         if ctx.invoked_subcommand is None:
-            print(1)
-            pass
+            msg = 'Please submit a ticket using the following format:\n' \
+                  '`r:support server/tech/acnh "Enter your message here"`\n' \
+                  'Please use `r:help support` for more information.'
+            await ctx.send(embed=tools.single_embed(msg))
 
     @support.group(aliases=['tech', 'bot'])
     async def technical(self, ctx, *, issue: str):
@@ -217,7 +244,7 @@ class Information(commands.Cog):
     @support.group(aliases=['in-game', 'ingame', 'ig', 'acnh'])
     async def in_game(self, ctx, *, issue: str):
         ticket_channel = await self.ticket_channel()
-        embed = await self.ticket_embed(ctx, 'technical', ctx.author, issue)
+        embed = await self.ticket_embed(ctx, 'in_game', ctx.author, issue)
         message = await ticket_channel.send(embed=embed)
         await message.add_reaction('👍')
         await ctx.send(embed=tools.single_embed(f'Your ticket has been submitted.'))
@@ -227,7 +254,7 @@ class Information(commands.Cog):
     @support.group()
     async def server(self, ctx, *, issue: str):
         ticket_channel = await self.ticket_channel()
-        embed = await self.ticket_embed(ctx, 'technical', ctx.author, issue)
+        embed = await self.ticket_embed(ctx, 'server', ctx.author, issue)
         message = await ticket_channel.send(embed=embed)
         await message.add_reaction('👍')
         await ctx.send(embed=tools.single_embed(f'Your ticket has been submitted.'))
@@ -392,6 +419,17 @@ class Information(commands.Cog):
     """
     Error Handling
     """
+
+    @support.error
+    @server.error
+    @technical.error
+    @in_game.error
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            msg = 'Please submit a ticket using the following format:\n' \
+                  '`r:support server/tech/acnh "Enter your message here"`\n' \
+                  'Please use `r:help support` for more information.'
+            await ctx.send(embed=tools.single_embed(msg))
 
     @bug.error
     async def on_command_error(self, ctx, error):
