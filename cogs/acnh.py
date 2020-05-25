@@ -112,7 +112,7 @@ class ACNH(commands.Cog):
         else:
             await ctx.send(embed=embed)
 
-    @commands.command(aliases=['insects', 'bugs'])
+    @commands.command(aliases=['insects', 'bugs', 'insect'])
     @commands.has_role('mae-supporters')
     async def insect_lookup(self, ctx, *, query):
         credit = discord.utils.get(ctx.guild.members, id=272151652344266762)
@@ -397,6 +397,31 @@ class ACNH(commands.Cog):
 
         paginator = BotEmbedPaginator(ctx, embeds)
         await paginator.run()
+
+    @commands.command()
+    @commands.has_role('mae-supporters')
+    async def diy(self, ctx, *, recipe):
+        credit = discord.utils.get(ctx.guild.members, id=272151652344266762)
+        async with aiohttp.ClientSession() as session:
+            url = f'{will_url}diy/{recipe.lower()}'
+            f, status = await self.fetch(session, url)
+            data = json.loads(f)
+
+        materials = [v for k, v in data.items() if v != '' and k.startswith('material_')]
+        material_amounts = [v for k, v in data.items() if v != 0 and k.startswith('matnum')]
+        mats = []
+        for x, y in zip(materials, material_amounts):
+            mats.append(f'{x} {"." * (20 - len(x))} {y}')
+        mats = '\n'.join(mats)
+        description = f'```\n' \
+                      f'Value: {data["sell"]}\n' \
+                      f'Category: {data["category"]}\n' \
+                      f'Source: {data["source"]}\n' \
+                      f'```'
+        embed = discord.Embed(title=data['name'].capitalize(), description=description, color=discord.Color.green())
+        embed.add_field(name='Materials', value=f'```\n{mats}```')
+        embed.set_footer(text=f'API courtesy of {credit.display_name} ({credit})')
+        await ctx.send(embed=embed)
 
     """
     Error Handling
