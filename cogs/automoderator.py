@@ -187,19 +187,8 @@ class Automoderator(commands.Cog):
         except Exception as e:
             print(f'Could not update server stats: {e}')
 
-        # pass young accounts into a channel for review
-        eight_hours = 28800
-        if tools.to_seconds(member.created_at) < eight_hours and member.premium_since is None:
-            review = self.client.get_channel(707917383628619888)
-            msg = f'{member.mention} has been flagged as a new account.'
-            embed = discord.Embed(description=msg, color=discord.Color.red())
-            embed.set_thumbnail(url=member.avatar_url)
-            embed.add_field(name='Joined Discord', value=member.created_at, inline=False)
-            embed.add_field(name='Joined Server', value=member.joined_at, inline=False)
-            await review.send(embed=embed)
-
         # alert general on every 1000th member
-        if len(member.guild.members) % 1000 == 0:
+        if len([m for m in member.guild.members if not m.bot]) % 1000 == 0:
             chan = self.client.get_channel(694013862667616310)
             msg = f'Welcome {member.mention} as our {len(member.guild.members)}th member!'
             await chan.send(embed=tools.single_embed(msg))
@@ -318,7 +307,7 @@ class Automoderator(commands.Cog):
                     msg = f'{message.author.mention} has been notified that they are spamming mentions.\n' \
                           f'[Jump to Message]({message.jump_url})'
                     embed = discord.Embed(description=msg, color=discord.Color.red())
-                    embed.set_author(name=message.author.display_name, icon_url=message.author.avatar_url)
+                    embed.set_author(name=f'{message.author} | {message.author.display_name}', icon_url=message.author.avatar_url)
                     await admin_channel.send(embed=embed)
 
         if len(message.attachments) > 0:
@@ -347,7 +336,7 @@ class Automoderator(commands.Cog):
                     msg = f'{message.author.mention} has been notified that they are spamming attachments.\n' \
                           f'[Jump to Message]({message.jump_url})'
                     embed = discord.Embed(description=msg, color=discord.Color.red())
-                    embed.set_author(name=message.author.display_name, icon_url=message.author.avatar_url)
+                    embed.set_author(name=f'{message.author} | {message.author.display_name}', icon_url=message.author.avatar_url)
                     await admin_channel.send(embed=embed)
 
         if await self.profanity_filter(message) and not message.author.permissions_in(message.channel).manage_messages:
@@ -356,7 +345,7 @@ class Automoderator(commands.Cog):
                           f'Message: "{message.content}" \n' \
                           f'[Jump to Message]({message.jump_url})'
             embed = discord.Embed(title='Slur/Profanity Detected', description=description, color=discord.Color.red())
-            embed.set_author(name=message.author.display_name, icon_url=message.author.avatar_url)
+            embed.set_author(name=f'{message.author} | {message.author.display_name}', icon_url=message.author.avatar_url)
             try:
                 url = message.attachments[0].url
                 embed.set_image(url=url)
