@@ -74,7 +74,7 @@ class Automoderator(commands.Cog):
 
         # if member's warnings are 2 or greater, commence a vote to kick
         warnings, messages = database.get_warnings(message.author)
-        fmt = [f'{m[4]} - {m[3]}' for m in messages]
+        fmt = [f'{m[4]} - {m[3]} *Issuer: {discord.utils.get(message.author.guild.members, id=m[5]).display_name}' for m in messages]
         if warnings >= 2:
             admin_channel = database.get_administrative(message.guild)
             msg = f'**{message.author.display_name}** has reached `{warnings}` warnings. Should they be kicked?\n' \
@@ -416,7 +416,7 @@ class Automoderator(commands.Cog):
                     reaction, reactor = await self.client.wait_for('reaction_add', check=check_react)
                     if reaction.emoji == '✅':
                         warning = 'inappropriate or obscene language'
-                        database.add_warning(message.author, warning)
+                        database.add_warning(message.author, warning, self.client.user)
 
                         try:
                             msg = f'You have received a warning from an administrator or mod in {message.guild.name} for the ' \
@@ -497,7 +497,7 @@ class Automoderator(commands.Cog):
             except Exception as e:
                 print(f'Could not delete discord.gg message {message}: {e}')
             msg = f'Advertising other Discord servers is not allowed.'
-            database.add_warning(message.author, msg)
+            database.add_warning(message.author, msg, self.client.user)
             fmt = f'You have received an automatic warning for posting a Discord link in ' \
                   f'**{message.guild.name}**.\n> "{msg}"'
             try:
@@ -519,7 +519,7 @@ class Automoderator(commands.Cog):
             except Exception as e:
                 print(f'Could not delete turnip.exchange message {message}: {e}')
             msg = f'Advertising Turnip Exchange links is not allowed.'
-            database.add_warning(message.author, msg)
+            database.add_warning(message.author, msg, self.client.user)
             fmt = f'You have received an automatic warning for posting a Turnip Exchange link in ' \
                   f'**{message.guild.name}**.\n> "{msg}"'
 

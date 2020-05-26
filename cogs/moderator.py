@@ -422,6 +422,11 @@ class Moderator(commands.Cog):
             await ctx.send(embed=tools.single_embed(f'Kick cancelled.'))
 
     @commands.command()
+    @commands.is_owner()
+    async def x(self, ctx):
+        print(self.client.user.id)
+
+    @commands.command()
     @commands.has_permissions(kick_members=True)
     async def warn(self, ctx, member: discord.Member, *, message: str = None):
         if not await self.admin_cog_on(ctx):
@@ -430,9 +435,9 @@ class Moderator(commands.Cog):
         def check(react, user):
             return admin_channel == react.message.channel and not user.bot
 
-        database.add_warning(member, message)
+        database.add_warning(member, message, ctx.author)
         warnings, messages = database.get_warnings(member)
-        fmt = [f'{m[4]} - {m[3]}' for m in messages]
+        fmt = [f'{m[4]} - {m[3]} *Issuer: {discord.utils.get(ctx.guild.members, id=m[5]).display_name}' for m in messages]
 
         msg = f'You have received a warning from an administrator or mod in {ctx.guild.name}.\n> "{message}"'
         try:
@@ -498,7 +503,7 @@ class Moderator(commands.Cog):
             count = 1
             fmt = []
             for m in messages:
-                fmt.append([m[0], f'{count}. {m[4]} - {m[3]}'])
+                fmt.append([m[0], f'{count}. {m[4]} - {m[3]} *Issuer: {discord.utils.get(ctx.guild.members, id=m[5]).display_name}'])
                 count += 1
             # fmt = [f'{count}. {m[1]} - {m[0]}' for m in messages]
             # while True:
