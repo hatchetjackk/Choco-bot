@@ -27,7 +27,6 @@ class Moderator(commands.Cog):
     async def mod_restart(self, ctx):
         print('* Unloading moderator')
         self.client.unload_extension('cogs.moderator')
-        # print('Cancelling loops')
         print('* Loading moderator')
         self.client.load_extension('cogs.moderator')
         await ctx.send(embed=tools.single_embed('Moderator reloaded'))
@@ -422,11 +421,6 @@ class Moderator(commands.Cog):
             await ctx.send(embed=tools.single_embed(f'Kick cancelled.'))
 
     @commands.command()
-    @commands.is_owner()
-    async def x(self, ctx):
-        print(self.client.user.id)
-
-    @commands.command()
     @commands.has_permissions(kick_members=True)
     async def warn(self, ctx, member: discord.Member, *, message: str = None):
         if not await self.admin_cog_on(ctx):
@@ -503,60 +497,16 @@ class Moderator(commands.Cog):
             count = 1
             fmt = []
             for m in messages:
-                fmt.append([m[0], f'{count}. {m[4]} - {m[3]} *Issuer: {discord.utils.get(ctx.guild.members, id=m[5]).display_name}'])
+                if m[5] is None:
+                    fmt.append(f'`{count}.` {m[4]} - {m[3]} *Issuer: N/A*')
+                else:
+                    fmt.append(f'`{count}.` {m[4]} - {m[3]} *Issuer: {discord.utils.get(ctx.guild.members, id=m[5]).display_name}*')
                 count += 1
-            # fmt = [f'{count}. {m[1]} - {m[0]}' for m in messages]
-            # while True:
             if len(fmt) > 0:
-                msg = f'**{member.display_name}** has `{warnings}` warning(s).\n' \
-                      f'__Past Warnings__\n' + '\n'.join(m[1] for m in fmt)
+                msg = f'__Past Warnings__\n' + '\n'.join(fmt)
                 embed = discord.Embed(color=discord.Color.red(), description=msg)
-                embed.set_thumbnail(url=member.avatar_url)
-                prompt = await ctx.send(embed=embed)
-                reactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '⏩', '⏹']
-
-                # msg = '\n'.join(fmt[:10])
-                # embed = discord.Embed(title='Who do you want to kick?', description=msg, color=discord.Color.green())
-                # embed.set_thumbnail(url=self.client.user.avatar_url)
-                # prompt = await ctx.channel.send(embed=embed)
-                # for i in range(0, len(fmt[:11])):
-                #     await prompt.add_reaction(reactions[i])
-                # await prompt.add_reaction('⏹')
-                #
-                # def check_react(react, user):
-                #     return react.message.id == prompt.id and user.id == ctx.author.id
-                #
-                # reaction, member = await self.client.wait_for('reaction_add', check=check_react)
-                # removed_warning = None
-                # if reaction.emoji == reactions[0]:
-                #     removed_warning = fmt[0]
-                # if reaction.emoji == reactions[1]:
-                #     removed_warning = fmt[1]
-                # if reaction.emoji == reactions[2]:
-                #     removed_warning = fmt[2]
-                # if reaction.emoji == reactions[3]:
-                #     removed_warning = fmt[3]
-                # if reaction.emoji == reactions[4]:
-                #     removed_warning = fmt[4]
-                # if reaction.emoji == reactions[5]:
-                #     removed_warning = fmt[5]
-                # if reaction.emoji == reactions[6]:
-                #     removed_warning = fmt[6]
-                # if reaction.emoji == reactions[7]:
-                #     removed_warning = fmt[7]
-                # if reaction.emoji == reactions[8]:
-                #     removed_warning = fmt[8]
-                # if reaction.emoji == reactions[9]:
-                #     removed_warning = fmt[9]
-                # if reaction.emoji == reactions[10]:
-                #     del fmt[:10]
-                #     await prompt.delete()
-                #     continue
-                # if reaction.emoji == '⏹':
-                #     await prompt.delete()
-                #     return
-
-                # remove the warning
+                embed.set_author(name=f'{member.display_name} ({member})', icon_url=member.avatar_url)
+                await ctx.send(embed=embed)
 
     @commands.command(aliases=['cwarn'])
     @commands.has_permissions(kick_members=True)
