@@ -240,6 +240,12 @@ class Help(commands.Cog):
         description = 'Get general information about a DIY recipe including required materials.'
         await self.help2_embed(ctx, args, description)
 
+    @help_page.group()
+    async def fossils(self, ctx):
+        args = None
+        description = 'Get a list of available fossils and their sell value in ACNH.'
+        await self.help2_embed(ctx, args, description)
+
     @help_page.group(aliases=['bugs'])
     async def insects(self, ctx):
         args = 'insect_name / month'
@@ -535,6 +541,13 @@ class Help(commands.Cog):
 
     @help_page.group()
     @commands.has_permissions(administrator=True)
+    async def pf(self, ctx):
+        args = '@user'
+        description = 'Get all of the available information about yourself or am optional user.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    @commands.has_permissions(administrator=True)
     async def guild(self, ctx):
         args = None
         description = 'Get information about the server.'
@@ -594,7 +607,7 @@ class Help(commands.Cog):
         args = None
         description = 'Managing negative behavior is done with warnings, kicks, and bans. Some warnings are automatic ' \
                       'while others have to be given by the Mod and Admin teams. Disciplinary commands include: \n' \
-                      '`warnings`, `warn`, `clear_warnings`, `kick`, `ban`\n' \
+                      '`warnings`, `warn`, `clear_warnings`, `delete_warning`, `kick`, `ban`\n' \
                       'Use the `help` command for more information on each command.'
         await self.help2_embed(ctx, args, description)
 
@@ -610,7 +623,14 @@ class Help(commands.Cog):
     async def clear_warnings(self, ctx):
         args = '@user'
         description = 'Clear all warnings for mentioned user.'
-        await self.help2_embed(ctx, args, description)
+        await self.help2_embed(ctx, args, description, aliases=self.clear_warnings.aliases)
+
+    @help_page.group(aliases=['delwarn'])
+    @commands.has_permissions(kick_members=True)
+    async def delete_warnings(self, ctx):
+        args = 'warning_id'
+        description = 'Delete a user\'s warning. You can get the message/warning ID from the `warnings` command.'
+        await self.help2_embed(ctx, args, description, aliases=self.delete_warnings.aliases)
 
     @help_page.group(aliases=['getbl'])
     async def get_blacklist(self, ctx):
