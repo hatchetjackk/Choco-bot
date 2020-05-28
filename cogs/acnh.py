@@ -1,14 +1,11 @@
-import inspect
 import discord
 import aiohttp
 import json
 import util.tools as tools
 from discord.ext import commands
-from bs4 import BeautifulSoup
-from disputils import BotEmbedPaginator, BotConfirmation, BotMultipleChoice
+from disputils import BotEmbedPaginator
 
 # API offered by VillChurch
-# will_url = 'http://161.35.160.226:8080/'
 will_url = 'http://157.245.28.81/'
 image_url = 'http://williamspires.co.uk:9876/villagers/'
 image = 'http://williamspires.co.uk:9876/'
@@ -364,6 +361,46 @@ class ACNH(commands.Cog):
         paginator = BotEmbedPaginator(ctx, embeds)
         await paginator.run()
 
+    @commands.command(aliases=['fossils', 'fossil'])
+    @commands.has_role('mae-supporters')
+    async def fossil_lookup(self, ctx, *, query=None):
+        credit = discord.utils.get(ctx.guild.members, id=272151652344266762)
+        async with aiohttp.ClientSession() as session:
+            url = f'http://157.245.28.81/all/fossils'
+            f, status = await self.fetch(session, url)
+            data = json.loads(f)
+        if query is not None:
+            for k in data:
+                if query.lower() == k['name']:
+                    description = f'```\n' \
+                                  f'Value: {k["sell"]} bells\n' \
+                                  f'Museum Room: {k["museum"]}```'
+                    embed = discord.Embed(title=k['name'], description=description, color=discord.Color.green())
+                    embed.set_image(url=f'http://williamspires.co.uk:9876/Furniture/{k["filename"]}.png')
+                    embed.set_footer(text=f'API courtesy of {credit.display_name} ({credit})')
+                    await ctx.send(embed=embed)
+                    return
+            await ctx.send(embed=tools.single_embed_neg(f'Fossil "{query}" not found.'))
+        else:
+            embeds = []
+            fossil_list = []
+            title = 'Fossils'
+            count = 1
+            for fossil in data:
+                if len(fossil_list) == 25:
+                    fossil_list = '\n'.join(fossil_list)
+                    embed = discord.Embed(title=title, color=discord.Color.green())
+                    embed.add_field(name=f'Fossils Part {count}', value=f'```\n{fossil_list}```')
+                    embed.set_footer(text=f'API courtesy of {credit.display_name} ({credit})')
+                    embeds.append(embed)
+                    fossil_list = []
+                    count += 1
+                else:
+                    fossil_list.append(f'{fossil["name"]} {"." * (20 - len(fossil["name"]))} {fossil["sell"]} bells')
+
+            paginator = BotEmbedPaginator(ctx, embeds)
+            await paginator.run()
+
     @commands.command(aliases=['pers', 'personality'])
     @commands.has_role('mae-supporters')
     async def personality_lookup(self, ctx, personality):
@@ -426,6 +463,14 @@ class ACNH(commands.Cog):
     """
     Error Handling
     """
+
+    @species_lookup.error
+    @insect_lookup.error
+    @fish_lookup.error
+    @diy.error
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send(embed=tools.single_embed(f'{error}'))
 
     @villager_lookup.error
     async def on_command_error(self, ctx, error):
