@@ -45,13 +45,13 @@ class Rep(commands.Cog):
             rating = int(pos/(pos+neg)*100)
         if rating == 0:
             stars = 'No Rating'
-        elif rating < 20:
+        elif rating < 30:
             stars = f'{turnip_emoji}'
-        elif 20 <= rating < 40:
+        elif 30 <= rating < 50:
             stars = f'{turnip_emoji} ' * 2
-        elif 40 <= rating < 60:
+        elif 50 <= rating < 70:
             stars = f'{turnip_emoji} ' * 3
-        elif 60 <= rating < 80:
+        elif 70 <= rating < 90:
             stars = f'{turnip_emoji} ' * 4
         else:
             stars = f'{turnip_emoji} ' * 5
@@ -454,7 +454,7 @@ class Rep(commands.Cog):
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.message.delete()
             msg = f'You appear to be missing the `{error.param.name}` argument required for this command.\n' \
-                  f'Please use `{prefix}neg @member message` for positive reviews. **Messages are required.**'
+                  f'Please use `{prefix}neg @member message` for negative reviews. **Messages are required.**'
             await ctx.send(embed=tools.single_embed_tooltip(msg))
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.message.delete()
