@@ -2,76 +2,142 @@ import inspect
 import discord
 import util.db as database
 from discord.ext import commands
+from disputils import BotEmbedPaginator, BotConfirmation, BotMultipleChoice
 
 rep_cmds = ['rep', 'pos', 'mpos', 'neg', 'repboard', 'karma', 'karmaboard', 'top_reviewers']
-dms_cmds = ['create', 'leave', 'queue']
-fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd', 'who', 'guild', 'pfp', 'find']
+dms_cmds = ['create', 'leave', 'queue', 'villager', 'personality', 'species', 'insects', 'bugs', 'diy']
+fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd', 'guild', 'pfp', 'pf', 'find', 'sw-set', 'sw-get',
+            'remindme', 'reminders', 'delreminder', 'time']
+game_cmds = ['dig', 'net', 'cast', 'slots', 'bells']
 adm_cmds = ['settings', 'prefix', 'spam', 'reputation', 'disciplinary', 'admin_channel', 'purge', 'clm', 'blacklist',
             'get_blacklist', 'delete_blacklist', 'selfrole', 'autorole', 'role', 'archive', 'messages']
 misc_cmds = ['bug', 'nick', 'afk', 'report', 'support']
-dev_cmds = ['reboot', 'reload', 'load']
+dev_cmds = ['reboot', 'reload', 'load', 'clean_session']
 
 
 class Help(commands.Cog):
     def __init__(self, client):
         self.client = client
 
+    # @commands.group()
+    # async def help_page2(self, ctx):
+    #     # format commands into readable lists
+    #     def list_cmds(cmds):
+    #         if 7 < len(cmds) < 10:
+    #             a = cmds[:7]
+    #             b = cmds[7:]
+    #             lst = []
+    #             if len(b) < len(a):
+    #                 r = len(a) - len(b)
+    #                 for i in range(r):
+    #                     b.append('')
+    #             for x, y in zip(a, b):
+    #                 spaces_x = 15 - (len(x))
+    #                 lst.append(f'{x}{" " * spaces_x}{y}')
+    #             lst = '\n' + '\n'.join(lst)
+    #         elif len(cmds) > 10:
+    #             a = cmds[:6]
+    #             b = cmds[6:12]
+    #             c = cmds[12:]
+    #             lst = []
+    #             if len(c) < len(b):
+    #                 r = len(b) - len(c)
+    #                 for i in range(r):
+    #                     c.append('')
+    #             for x, y, z in zip(a, b, c):
+    #                 spaces_x = 15 - (len(x))
+    #                 spaces_y = 15 - (len(y))
+    #                 lst.append(f'{x}{" " * spaces_x}{y}{" " * spaces_y}{z}')
+    #             lst = '\n' + '\n'.join(lst)
+    #         else:
+    #             lst = '\n' + '\n'.join([i for i in cmds])
+    #         return f'```{lst}```'
+    #
+    #     if ctx.invoked_subcommand is None:
+    #         prefix = database.get_prefix(ctx.guild)[0]
+    #         msg = f'> Info\nType `{prefix}help [command]` to get more information about a command'
+    #         embed = discord.Embed(title=f'Commands and Features', color=discord.Color.green(), description=msg)
+    #         embed.add_field(name='> Reputation', value=list_cmds(rep_cmds))
+    #         embed.add_field(name='> Fun', value=list_cmds(fun_cmds))
+    #         embed.add_field(name='> Queueing System', value=list_cmds(dms_cmds), inline=False)
+    #         embed.add_field(name='> Administrative', value=list_cmds(adm_cmds), inline=False)
+    #         embed.add_field(name='> Developer', value=list_cmds(dev_cmds))
+    #         embed.add_field(name='> Misc', value=list_cmds(misc_cmds))
+    #         about = f'This bot is owned and actively developed by **{self.client.get_user(self.client.owner_id).display_name}**. ' \
+    #                 f'If you\'d like to support my work, you can buy me a [coffee](https://ko-fi.com/hatchet_jackk). ' \
+    #                 f'Cheers.'
+    #         embed.add_field(name='> About', value=about, inline=False)
+    #         embed.set_thumbnail(url=self.client.user.avatar_url)
+    #         await ctx.send(embed=embed)
+
     @commands.group(aliases=['help'])
     async def help_page(self, ctx):
-        # format commands into readable lists
-        def list_cmds(cmds):
-            if 7 < len(cmds) < 10:
-                a = cmds[:7]
-                b = cmds[7:]
-                lst = []
-                if len(b) < len(a):
-                    r = len(a) - len(b)
-                    for i in range(r):
-                        b.append('')
-                for x, y in zip(a, b):
-                    spaces_x = 15 - (len(x))
-                    lst.append(f'{x}{" " * spaces_x}{y}')
-                lst = '\n' + '\n'.join(lst)
-            elif len(cmds) > 10:
-                a = cmds[:6]
-                b = cmds[6:12]
-                c = cmds[12:]
-                lst = []
-                if len(c) < len(b):
-                    r = len(b) - len(c)
-                    for i in range(r):
-                        c.append('')
-                for x, y, z in zip(a, b, c):
-                    spaces_x = 15 - (len(x))
-                    spaces_y = 15 - (len(y))
-                    lst.append(f'{x}{" " * spaces_x}{y}{" " * spaces_y}{z}')
-                lst = '\n' + '\n'.join(lst)
-            else:
-                lst = '\n' + '\n'.join([i for i in cmds])
-            return f'```{lst}```'
-
         if ctx.invoked_subcommand is None:
-            prefix = database.get_prefix(ctx.guild)[0]
-            msg = f'> Info\nType `{prefix}help [command]` to get more information about a command'
-            embed = discord.Embed(title=f'Commands and Features', color=discord.Color.green(), description=msg)
-            embed.add_field(name='> Reputation', value=list_cmds(rep_cmds))
-            embed.add_field(name='> Fun', value=list_cmds(fun_cmds))
-            embed.add_field(name='> Queueing System', value=list_cmds(dms_cmds), inline=False)
-            embed.add_field(name='> Administrative', value=list_cmds(adm_cmds), inline=False)
-            embed.add_field(name='> Developer', value=list_cmds(dev_cmds))
-            embed.add_field(name='> Misc', value=list_cmds(misc_cmds))
-            about = f'This bot is owned and actively developed by **{self.client.get_user(self.client.owner_id).display_name}**. ' \
-                    f'If you\'d like to support my work, you can buy me a [coffee](https://ko-fi.com/hatchet_jackk). ' \
-                    f'Cheers.'
-            embed.add_field(name='> About', value=about, inline=False)
-            embed.set_thumbnail(url=self.client.user.avatar_url)
-            await ctx.send(embed=embed)
+            embeds = []
+            color = discord.Color.green()
+            owner = discord.utils.get(ctx.guild.members, id=self.client.owner_id).display_name
+            footer = f'Owned and actively developed by {owner}'
+            name = f'> Use `r:help command` to learn more'
 
-    async def help_embed(self, ctx, title, description, footer):
-        embed = discord.Embed(title=title, description=description, color=discord.Color.green())
-        embed.set_thumbnail(url=self.client.user.avatar_url)
-        embed.set_footer(text=footer)
-        await ctx.send(embed=embed)
+            description = '[Reputation](http://localhost) - Fun - ACNH - Games - Administrative - Misc - Developer'
+            embed = discord.Embed(title='Help Pages', description=description, color=color)
+            value = "\n".join(rep_cmds)
+            embed.add_field(name=name, value=f'```\n{value}```')
+            embed.set_footer(text=footer)
+            embeds.append(embed)
+
+            description = 'Reputation - [Fun](http://localhost) - ACNH - Games -Administrative - Misc - Developer'
+            embed = discord.Embed(title='Help Pages', description=description, color=color)
+            value = "\n".join(fun_cmds)
+            embed.add_field(name=name, value=f'```\n{value}```')
+            embed.set_footer(text=footer)
+            embeds.append(embed)
+
+            description = 'Reputation - Fun - [ACNH](http://localhost) - Games -Administrative - Misc - Developer'
+            embed = discord.Embed(title='Help Pages', description=description, color=color)
+            value = "\n".join(dms_cmds)
+            embed.add_field(name=name, value=f'```\n{value}```')
+            embed.set_footer(text=footer)
+            embeds.append(embed)
+
+            description = 'Reputation - Fun - ACNH - [Games](http://localhost) - Administrative - Misc - Developer'
+            embed = discord.Embed(title='Help Pages', description=description, color=color)
+            value = "\n".join(game_cmds)
+            embed.add_field(name=name, value=f'```\n{value}```')
+            embed.set_footer(text=footer)
+            embeds.append(embed)
+
+            description = 'Reputation - Fun - ACNH - Games - [Administrative](http://localhost) - Misc - Developer'
+            embed = discord.Embed(title='Help Pages', description=description, color=color)
+            value = "\n".join(adm_cmds)
+            embed.add_field(name=name, value=f'```\n{value}```')
+            embed.set_footer(text=footer)
+            embeds.append(embed)
+
+            description = 'Reputation - Fun - ACNH - Games - Administrative - [Misc](http://localhost) - Developer'
+            embed = discord.Embed(title='Help Pages', description=description, color=color)
+            value = "\n".join(misc_cmds)
+            embed.add_field(name=name, value=f'```\n{value}```')
+            embed.set_footer(text=footer)
+            embeds.append(embed)
+
+            description = 'Reputation - Fun - ACNH - Games - Administrative - Misc - [Developer](http://localhost)'
+            embed = discord.Embed(title='Help Pages', description=description, color=color)
+            value = "\n".join(dev_cmds)
+            embed.add_field(name=name, value=f'```\n{value}```')
+            msg = f'This bot is owned and actively developed by {owner}. If you\'d like to support my work, you can buy me a [coffee](https://ko-fi.com/hatchet_jackk).\nCheers.'
+            embed.add_field(name='About', value=msg, inline=False)
+            embed.set_footer(text=footer)
+            embeds.append(embed)
+
+            paginator = BotEmbedPaginator(ctx, embeds)
+            await paginator.run()
+
+    # async def help_embed(self, ctx, title, description, footer):
+    #     embed = discord.Embed(title=title, description=description, color=discord.Color.green())
+    #     embed.set_thumbnail(url=self.client.user.avatar_url)
+    #     embed.set_footer(text=footer)
+    #     await ctx.send(embed=embed)
 
     async def help2_embed(self, ctx, args, description, aliases=None):
         prefix = database.get_prefix(ctx.guild)[0]
@@ -169,6 +235,44 @@ class Help(commands.Cog):
     """ dms commands """
 
     @help_page.group()
+    async def diy(self, ctx):
+        args = 'item'
+        description = 'Get general information about a DIY recipe including required materials.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group(aliases=['bugs'])
+    async def insects(self, ctx):
+        args = 'insect_name / month'
+        description = '`month`: If you call a month, you will get all insects available for that month **and** a list of insects leaving next month.\n' \
+                      '`insect_name`: If you call an insect name you will get relevant information about that insect plus an image.'
+        await self.help2_embed(ctx, args, description, aliases=self.insects.aliases)
+
+    @help_page.group()
+    async def fish(self, ctx):
+        args = 'fish_name / month'
+        description = '`month`: If you call a month, you will get all fish available for that month **and** a list of fish leaving next month.\n' \
+                      '`fish_name`: If you call a fish name you will get relevant information about that fish plus an image.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    async def villager(self, ctx):
+        args = 'villager_name'
+        description = 'Find quick info about a villager.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    async def species(self, ctx):
+        args = 'species'
+        description = 'Quickly find all villagers of a certain species.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group(aliases=['pers'])
+    async def personality(self, ctx):
+        args = 'personality_type'
+        description = 'Get a list of villagers with the associated personality type.'
+        await self.help2_embed(ctx, args, description, aliases=self.personality.aliases)
+
+    @help_page.group()
     async def rep(self, ctx):
         args = '@optional_user'
         description = 'Get your or the (optional) mentioned user\'s reputation. If you do not want to ping the user, you ' \
@@ -233,11 +337,55 @@ class Help(commands.Cog):
 
     """ fun commands """
 
+    @help_page.group(aliases=['remind_me', 'remind-me'])
+    async def remindme(self, ctx):
+        args = 'number denominator message'
+        description = f'This is a simple reminder tool which you can set to send you a message at minutes, hours, or days ' \
+                      f'from the time to create the command. You can only use the denominators `m` for minutes, `h` ' \
+                      f'for hours, and `d` for days using this format:' \
+                      f'```\n' \
+                      f'r:remindme 1 m This will send me a DM in 1 minute\n' \
+                      f'r:remindme 1 h This will send me a DM in 1 hour\n' \
+                      f'r:remindme 1 d This will send me a DM in 1 day```'
+        await self.help2_embed(ctx, args, description, aliases=self.remindme.aliases)
+
+    @help_page.group()
+    async def reminders(self, ctx):
+        args = None
+        description = f'Get a list of current reminders.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    async def delreminder(self, ctx):
+        args = 'number'
+        description = f'Delete one of your reminders. You must know the index number of your reminder. To get the index ' \
+                      f'number, use the `reminders` command and note the **number** before the date (ie: 1.) of the ' \
+                      f'reminder you want to delete. That is the number you want to use.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    async def time(self, ctx):
+        args = None
+        description = f'Get the current time in UTC format.'
+        await self.help2_embed(ctx, args, description)
+
     @help_page.group()
     async def find(self, ctx):
         args = 'input'
         description = f'Search for users in the server.'
         await self.help2_embed(ctx, args, description)
+
+    @help_page.group(aliases=['sw-set'])
+    async def sw_set(self, ctx):
+        args = 'switch-code'
+        description = f'Store your switch code for later retrieval.'
+        await self.help2_embed(ctx, args, description, aliases=self.sw_set.aliases)
+
+    @help_page.group(aliases=['sw-get'])
+    async def sw_get(self, ctx):
+        args = None
+        description = f'Show your Switch friend code.'
+        await self.help2_embed(ctx, args, description, aliases=self.sw_get.aliases)
 
     @help_page.group()
     async def roll(self, ctx):
@@ -279,6 +427,42 @@ class Help(commands.Cog):
     async def rd(self, ctx):
         args = 'subreddit'
         description = f'Get a link for the queried subreddit.'
+        await self.help2_embed(ctx, args, description)
+
+    """ Game Commands """
+
+    @help_page.group()
+    async def bells(self, ctx):
+        args = None
+        description = f'Gather some bells. You can do this once per day. Mae-Supporters earn 50% more bells per use.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    async def dig(self, ctx):
+        args = None
+        description = f'Dig up some fossils! Each attempt costs 10 bells for "excavation permits."'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    async def net(self, ctx):
+        args = None
+        description = f'Try to catch some bugs for your collection! Each attempt uses 10 bells for "bug bait!"'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    async def cast(self, ctx):
+        args = None
+        description = f'Try to catch some fish for your collection! Each attempt uses 10 bells for "fish bait!"'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    async def slots(self, ctx):
+        args = 'bells'
+        description = f'Bet some bells at the slots for a chance to hit the jackpot! Default bet is 10 bells.\n\n' \
+                      f'Winning Scenarios:\n' \
+                      f'🍒 x3 ........................ Win 10x!\n' \
+                      f'Match all 3 .............. Win 4x!\n' \
+                      f'Match any 2 ............ Win 2x!'
         await self.help2_embed(ctx, args, description)
 
     """ admin commands """
