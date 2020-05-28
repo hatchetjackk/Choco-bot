@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 import sys
 import os
 import json
@@ -494,19 +495,44 @@ class Moderator(commands.Cog):
             await ctx.send(embed=embed)
         else:
             warnings, messages = database.get_warnings(member)
-            count = 1
             fmt = []
             for m in messages:
                 if m[5] is None:
-                    fmt.append(f'`{count}.` {m[4]} - {m[3]} *Issuer: N/A*')
+                    fmt.append(f'`{m[0]}.` {m[4]} - {m[3]} *Issuer: N/A*')
                 else:
-                    fmt.append(f'`{count}.` {m[4]} - {m[3]} *Issuer: {discord.utils.get(ctx.guild.members, id=m[5]).display_name}*')
-                count += 1
+                    fmt.append(f'`{m[0]}.` {m[4]} - {m[3]} *Issuer: {discord.utils.get(ctx.guild.members, id=m[5]).display_name}*')
             if len(fmt) > 0:
                 msg = f'__Past Warnings__\n' + '\n'.join(fmt)
                 embed = discord.Embed(color=discord.Color.red(), description=msg)
                 embed.set_author(name=f'{member.display_name} ({member})', icon_url=member.avatar_url)
                 await ctx.send(embed=embed)
+
+    @staticmethod
+    async def load_database():
+        path = 'files/data.db'
+        conn = sqlite3.connect(path)
+        curs = conn.cursor()
+        return conn, curs
+
+    async def remove_warning(self, warning):
+        conn, curs = await self.load_database()
+        curs.execute('SELECT member, message FROM warnings WHERE id = ?', (warning, ))
+        member_id, message = curs.fetchone()
+        with conn:
+            curs.execute("DELETE FROM warnings WHERE id = ?", (warning, ))
+        return member_id, message
+
+    @commands.command(aliases=['delwarn'])
+    @commands.has_permissions(kick_members=True)
+    async def delete_warning(self, ctx, warning: int):
+        if not await self.admin_cog_on(ctx):
+            return
+        member_id, message = await self.remove_warning(warning)
+        member = discord.utils.get(ctx.guild.members, id=member_id)
+        msg = f'**{member.display_name}**\'s warning has been removed.\n> {message}'
+        embed = discord.Embed(color=discord.Color.green(), description=msg)
+        embed.set_thumbnail(url=member.avatar_url)
+        await ctx.send(embed=embed)
 
     @commands.command(aliases=['cwarn'])
     @commands.has_permissions(kick_members=True)
