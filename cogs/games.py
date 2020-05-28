@@ -493,12 +493,12 @@ class Games(commands.Cog):
 
         jackpot = False
         if all([slot1, slot2, slot3]) == ':cherry:':
-            winnings = bet * 11
+            winnings = bet * 10
             jackpot = True
         elif all([slot1, slot2]) == slot3:
-            winnings = bet * 5
+            winnings = bet * 4
         elif slot1 == slot2 or slot1 == slot3 or slot2 == slot3:
-            winnings = int(bet * 3)
+            winnings = int(bet * 2)
         else:
             winnings = bet * 0
 
