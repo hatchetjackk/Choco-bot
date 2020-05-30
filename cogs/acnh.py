@@ -1,6 +1,7 @@
 import discord
 import aiohttp
 import json
+import random
 import util.tools as tools
 from discord.ext import commands
 from disputils import BotEmbedPaginator
@@ -43,8 +44,98 @@ class ACNH(commands.Cog):
             return await response.text(), int(response.status)
 
     """
-    Villager Commands
+    Look-up Commands
     """
+
+    @commands.command()
+    @commands.has_role('mae-supporters')
+    async def pun(self, ctx):
+        async with aiohttp.ClientSession() as session:
+            choice = random.choice(['fish', 'insect'])
+            url = f'{will_url}/puns/{choice}'
+            f, status = await self.fetch(session, url)
+            data = json.loads(f)
+            embed = discord.Embed(description=f'{data["text"]}', color=discord.Color.green())
+            credit = discord.utils.get(ctx.guild.members, id=272151652344266762)
+            embed.set_footer(text=f'API courtesy of {credit.display_name} ({credit})')
+            await ctx.send(embed=embed)
+
+    @commands.command(aliases=['art'])
+    @commands.has_role('mae-supporters')
+    async def art_lookup(self, ctx, *, query=None):
+        credit = discord.utils.get(ctx.guild.members, id=272151652344266762)
+        embeds = []
+
+        if query is not None:
+            # real art
+            async with aiohttp.ClientSession() as session:
+                url = f'http://157.245.28.81/artwork/real/{query}'
+                f, status = await self.fetch(session, url)
+                if status != 200 or len(f) < 1:
+                    await ctx.send(embed=tools.single_embed_neg(f'Could not find art \"{query}\"!'))
+                    return
+                real = json.loads(f)
+                title = real['name']
+                description = f'Buy: {real["buy"]} bells, Sell: {real["sell"]} bells'
+                embed = discord.Embed(title=f'{title} (real)', description=description, color=discord.Color.green())
+                embed.add_field(name='Name', value=real["realArtworkTitle"], inline=False)
+                embed.add_field(name='Artist', value=real["artist"], inline=False)
+                embed.add_field(name='Description', value=real["museumDescription"], inline=False)
+                embed.set_image(url=f'http://williamspires.co.uk:9876/Furniture/{real["filename"]}.png')
+                embed.set_footer(text=f'API courtesy of {credit.display_name} ({credit})')
+                embeds.append(embed)
+
+            # fake art
+            async with aiohttp.ClientSession() as session:
+                url = f'http://157.245.28.81/artwork/fake/{query}'
+                f, status = await self.fetch(session, url)
+                try:
+                    fake = json.loads(f)
+                    title = fake['name']
+                    description = f'Buy: {fake["buy"]} bells, Sell: {fake["sell"]} bells'
+                    embed = discord.Embed(title=f'{title} (fake)', description=description, color=discord.Color.green())
+                    embed.add_field(name='Name', value=fake["realArtworkTitle"], inline=False)
+                    embed.add_field(name='Artist', value=fake["artist"], inline=False)
+                    embed.add_field(name='Description', value=fake["museumDescription"], inline=False)
+                    embed.set_image(url=f'http://williamspires.co.uk:9876/Furniture/{fake["filename"]}.png')
+                    embed.set_footer(text=f'API courtesy of {credit.display_name} ({credit})')
+                    embeds.append(embed)
+                except json.JSONDecodeError:
+                    pass
+
+        else:
+            async with aiohttp.ClientSession() as session:
+                url = 'http://157.245.28.81/artwork/all/real'
+                f, status = await self.fetch(session, url)
+                real = json.loads(f)
+
+            real_art = []
+            title = 'Art'
+            count = 1
+            for art in real:
+                if len(real_art) == 20:
+                    real_art = '\n'.join(real_art)
+                    embed = discord.Embed(title=title, color=discord.Color.green())
+                    embed.add_field(name=f'Part {count}', value=f'```\n{real_art}```')
+                    embed.set_footer(text=f'API courtesy of {credit.display_name} ({credit})')
+                    embeds.append(embed)
+                    real_art = []
+                    count += 1
+                else:
+                    art_name = art["realArtworkTitle"]
+                    if len(art_name) > 30:
+                        art_name = art_name[:30] + '...'
+                    real_art.append(f'{art["name"]} {"." * (25 - len(art["name"]))} {art_name}')
+
+            if len(real_art) > 0:
+                real_art = '\n'.join(real_art)
+                embed = discord.Embed(title=title, color=discord.Color.green())
+                embed.add_field(name=f'Part {count}', value=f'```\n{real_art}```')
+                embed.set_footer(text=f'API courtesy of {credit.display_name} ({credit})')
+                embeds.append(embed)
+
+        paginator = BotEmbedPaginator(ctx, embeds)
+        await paginator.run()
 
     @commands.command(aliases=['villager', 'villagers'])
     @commands.has_role('mae-supporters')
@@ -72,42 +163,36 @@ class ACNH(commands.Cog):
     @commands.command(aliases=['species'])
     @commands.has_role('mae-supporters')
     async def species_lookup(self, ctx, species):
+        credit = discord.utils.get(ctx.guild.members, id=272151652344266762)
         async with aiohttp.ClientSession() as session:
             url = f'{will_url}/villager/species/{species.lower()}'
-            f = await self.fetch(session, url)
-            data = json.loads(f[0])
-        villagers = [f'{k["name"]} {"." * (15 - len(k["name"]))} {k["personality"]}' for k in data]
-        credit = discord.utils.get(ctx.guild.members, id=272151652344266762)
-
-        if len(villagers) < 1:
-            await ctx.send(embed=tools.single_embed_neg(f'Species "{species}" not found.'))
-            return
+            f, status = await self.fetch(session, url)
+            villagers = json.loads(f)
+            if len(villagers) < 1:
+                await ctx.send(embed=tools.single_embed_neg(f'Could not find species "{species}."'))
+                return
 
         embeds = []
-        embed = discord.Embed(title=f'{species.capitalize()} Villagers', color=discord.Color.green())
+        villager_list = []
+        for villager in villagers:
+            if len(villager_list) == 25:
+                villager_list = '\n'.join(villager_list)
+                embed = discord.Embed(title=f'{species.capitalize()}', color=discord.Color.green())
+                embed.add_field(name='\u200b', value=f'```\n{villager_list}```')
+                embed.set_footer(text=f'API courtesy of {credit.display_name} ({credit})')
+                embeds.append(embed)
+            else:
+                villager_list.append(f'{villager["name"]} {"." * (20 - len(villager["name"]))} {villager["personality"]}')
 
-        if len(villagers) > 10:
-            list1 = '\n'.join(villagers[int(len(villagers)/2):])
-            embed.add_field(name='\u200b', value=f'```\n{list1}```')
-        else:
-            single_list = '\n'.join(villagers)
-            embed.add_field(name='\u200b', value=f'```\n{single_list}```')
-        embed.set_footer(text=f'API courtesy of {credit.display_name} ({credit})')
-        if len(villagers) > 10:
-            embeds.append(embed)
-
-        if len(villagers) > 10:
-            embed = discord.Embed(title=f'{species.capitalize()} Villagers', color=discord.Color.green())
-            list2 = '\n'.join(villagers[:int(len(villagers)/2)])
-            embed.add_field(name='\u200b', value=f'```\n{list2}```')
+        if len(villager_list) > 0:
+            villager_list = '\n'.join(villager_list)
+            embed = discord.Embed(title=f'{species.capitalize()}', color=discord.Color.green())
+            embed.add_field(name='\u200b', value=f'```\n{villager_list}```')
             embed.set_footer(text=f'API courtesy of {credit.display_name} ({credit})')
             embeds.append(embed)
 
-        if len(villagers) > 10:
-            paginator = BotEmbedPaginator(ctx, embeds)
-            await paginator.run()
-        else:
-            await ctx.send(embed=embed)
+        paginator = BotEmbedPaginator(ctx, embeds)
+        await paginator.run()
 
     @commands.command(aliases=['insects', 'bugs', 'insect'])
     @commands.has_role('mae-supporters')
