@@ -21,11 +21,11 @@ class Queue(commands.Cog):
 
     @commands.command()
     @commands.is_owner()
-    async def clean_session(self):
+    async def clean_session(self, ctx):
         self.sessions = {}
         with open('sessions/sessions.json', 'w') as f:
             json.dump(self.sessions, f, indent=4)
-        print('sessions overwritten')
+        await ctx.send(embed=tools.single_embed('Sessions cleared.'))
 
     @commands.command()
     @commands.has_permissions(manage_channels=True)
@@ -246,7 +246,8 @@ class Queue(commands.Cog):
             for place, group in values['groups'].items():
                 if ctx.author.id in group:
                     found = True
-                    host = self.client.get_user(int(session))
+                    host = discord.utils.get(ctx.guild.members, id=int(session))
+                    # host = self.client.get_user(int(session))
                     msg = f'**Position** {count}\n**Group #** {place}'
                     embed.add_field(name=f'{host.display_name} ({session})', value=msg)
                     count += 1
@@ -270,6 +271,8 @@ class Queue(commands.Cog):
         notification = await ctx.send(embed=tools.single_embed(msg))
 
         msg = f'**Welcome to the Daisy-Mae Queue Wizard!**\n' \
+              f'You can exit the wizard now or after completing all steps.\n' \
+              f'Note: If your session doesn\'t post, please try creating another session.\n\n' \
               f':raccoon: Create Timmy/Tommy Session\n' \
               f':pig: Create Daisy-Mae Session\n' \
               f':star: Create Custom Session\n\n' \
@@ -320,6 +323,27 @@ class Queue(commands.Cog):
 
         def check_react(react, user):
             return react.message.id == prompt.id and user.id == ctx.message.author.id
+
+        # self.sessions[ctx.author.id] = {
+        #     "type": "nook",
+        #     "session_notification": {
+        #         "id": notification.id,
+        #         "channel": notification.channel.id
+        #     },
+        #     "private_session": private_session.id,
+        #     "ban_list": [],
+        #     "message_id": None,
+        #     "queue_id": None,
+        #     "dodo_code": None,
+        #     "max_groups": None,
+        #     "members_per": None,
+        #     "groups": None,
+        #     "on_island": [],
+        #     "history": [],
+        #     "open": True
+        # }
+        #
+        # await self.write_session()
 
         # get dodo code
         title = 'Turnip Session'
@@ -474,6 +498,7 @@ class Queue(commands.Cog):
                       f':exclamation: Your session is ready! Click ✅ to post it or ❌ to cancel.'
         embed = await self.dms_embed(title, description)
         embed.set_image(url=img.url)
+        embed.set_footer(text='If your session fails to post, please try creating a new one.')
         await prompt.edit(embed=embed)
         await prompt.add_reaction('✅')
         await prompt.add_reaction('❌')
@@ -548,6 +573,27 @@ class Queue(commands.Cog):
 
         def check_react(react, user):
             return react.message.id == prompt.id and user.id == ctx.message.author.id
+
+        # self.sessions[ctx.author.id] = {
+        #     "type": "daisy",
+        #     "session_notification": {
+        #         "id": notification.id,
+        #         "channel": notification.channel.id
+        #     },
+        #     "private_session": private_session.id,
+        #     "ban_list": [],
+        #     "message_id": None,
+        #     "queue_id": None,
+        #     "dodo_code": None,
+        #     "max_groups": None,
+        #     "members_per": None,
+        #     "groups": None,
+        #     "on_island": [],
+        #     "history": [],
+        #     "open": True
+        # }
+        #
+        # await self.write_session()
 
         title = 'Daisy-Mae Session'
         embed = await self.dms_embed(title + ' (1/6)', ':exclamation: Enter your Dodo code')
@@ -702,6 +748,7 @@ class Queue(commands.Cog):
                       f':exclamation: Your session is ready! Click ✅ to post it.'
         embed = await self.dms_embed(title, description)
         embed.set_image(url=img.url)
+        embed.set_footer(text='If your session fails to post, please try creating a new one.')
         await prompt.edit(embed=embed)
         await prompt.add_reaction('✅')
         await prompt.add_reaction('❌')
@@ -769,6 +816,18 @@ class Queue(commands.Cog):
 
         def check_react(react, user):
             return react.message.id == prompt.id and user.id == ctx.message.author.id
+
+        # print('writing session')
+        # self.sessions[ctx.author.id] = {
+        #     "type": "other",
+        #     "session_notification": {
+        #         "id": notification.id,
+        #         "channel": notification.channel.id
+        #     },
+        #     "private_session": private_session.id,
+        # }
+        #
+        # await self.write_session()
 
         title = 'Custom'
         embed = await self.dms_embed(title + ' (1/6)', ':exclamation: Enter your Dodo code')
@@ -882,6 +941,7 @@ class Queue(commands.Cog):
                       f':exclamation: Your session is ready! Click ✅ to post it.'
         embed = await self.dms_embed(title, description)
         embed.set_image(url=img.url)
+        embed.set_footer(text='If your session fails to post, please try creating a new one.')
         await prompt.edit(embed=embed)
         await prompt.add_reaction('✅')
         await prompt.add_reaction('❌')
@@ -1188,7 +1248,8 @@ class Queue(commands.Cog):
         embed.add_field(name='\u200b', value=options1)
         embed.add_field(name='\u200b', value=options2)
         embed.add_field(name='\u200b', value=options3)
-        embed.set_footer(text=f'Last updated {datetime.now()}')
+        date = tools.format_date(datetime.utcnow())
+        embed.set_footer(text=f'Last updated {date} UTC')
 
         # edit queue in place if not exists
         queue_id = self.sessions[session_code]['queue_id']
@@ -1243,7 +1304,10 @@ class Queue(commands.Cog):
         delete_after = 5
 
         embed = discord.Embed(title='What is your message?', color=discord.Color.green())
-        prompt = await private_channel.send(embed=embed)
+        try:
+            prompt = await private_channel.send(embed=embed)
+        except discord.NotFound:
+            return
         try:
             notification = await self.client.wait_for('message', check=check_msg, timeout=30)
             message = notification.content
@@ -1280,12 +1344,16 @@ class Queue(commands.Cog):
         except asyncio.TimeoutError:
             embed = discord.Embed(title='Message prompt timed out.', color=discord.Color.green())
             await prompt.edit(embed=embed, delete_after=delete_after)
+        except discord.NotFound:
+            pass
 
     async def change_dodo(self, host):
         def check_msg(m):
             return m.author == host and m.channel == private_channel
 
         private_channel = await self.get_session_channel(host)
+        if private_channel is None:
+            return
         embed = discord.Embed(title='Please enter your new Dodo Code', color=discord.Color.green())
         prompt = await private_channel.send(embed=embed)
         msg = await self.client.wait_for('message', check=check_msg)
@@ -1454,7 +1522,7 @@ class Queue(commands.Cog):
                                 to_ban.remove(kicked_member)
                             except ValueError as e:
                                 print(f'guest ban error {e}')
-                msg = f'Member **{member_kick.mention}** banned from session.'
+                msg = f'Member **{member_kick}** banned from session.'
                 await private_channel.send(embed=tools.single_embed(msg), delete_after=5)
 
                 msg = f'You have been banned from **Session {session_code}**'
@@ -1512,9 +1580,12 @@ class Queue(commands.Cog):
                     await self.show_queue(user, emoji)
 
                 if emoji == reactions[1]:
+                    print(1)
                     session_code = await self.get_session_code(user)
+                    print(session_code)
                     if message == self.sessions[session_code]['queue_id']:
                         private_channel = await self.get_session_channel(user)
+                        print(private_channel)
                         msg = 'Are you sure you want to end your session?'
                         confirm = await private_channel.send(embed=tools.single_embed(msg))
                         await confirm.add_reaction('🇾')
@@ -1568,6 +1639,10 @@ class Queue(commands.Cog):
                 pass
             except discord.Forbidden as e:
                 print('raw reaction add error', e)
+            except RuntimeError:
+                private_channel = await self.get_session_channel(user)
+                msg = 'There was a problem sending the next group. Please try again.'
+                await private_channel.send(embed=tools.single_embed(msg), delete_after=5)
 
         # check join reactions
         guild = self.client.get_guild(payload.guild_id)
