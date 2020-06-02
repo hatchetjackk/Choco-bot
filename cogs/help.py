@@ -5,70 +5,19 @@ from discord.ext import commands
 from disputils import BotEmbedPaginator, BotConfirmation, BotMultipleChoice
 
 rep_cmds = ['rep', 'pos', 'mpos', 'neg', 'repboard', 'karma', 'karmaboard', 'top_reviewers']
-dms_cmds = ['create', 'leave', 'queue', 'villager', 'personality', 'species', 'insects', 'bugs', 'diy']
+dms_cmds = ['create', 'leave', 'queue', 'villager', 'personality', 'species', 'insects', 'bugs', 'diy', 'art']
 fun_cmds = ['roll', 'yt', 'card', 'rps', 'inspire', 'rd', 'guild', 'pfp', 'pf', 'find', 'sw-set', 'sw-get',
             'remindme', 'reminders', 'delreminder', 'time']
-game_cmds = ['dig', 'net', 'cast', 'slots', 'bells']
+game_cmds = ['dig', 'net', 'cast', 'slots', 'bells', 'appraise']
 adm_cmds = ['settings', 'prefix', 'spam', 'reputation', 'disciplinary', 'admin_channel', 'purge', 'clm', 'blacklist',
             'get_blacklist', 'delete_blacklist', 'selfrole', 'autorole', 'role', 'archive', 'messages']
-misc_cmds = ['bug', 'nick', 'afk', 'report', 'support']
+misc_cmds = ['bug', 'nick', 'afk', 'report', 'support', 'my_warnings']
 dev_cmds = ['reboot', 'reload', 'load', 'clean_session']
 
 
 class Help(commands.Cog):
     def __init__(self, client):
         self.client = client
-
-    # @commands.group()
-    # async def help_page2(self, ctx):
-    #     # format commands into readable lists
-    #     def list_cmds(cmds):
-    #         if 7 < len(cmds) < 10:
-    #             a = cmds[:7]
-    #             b = cmds[7:]
-    #             lst = []
-    #             if len(b) < len(a):
-    #                 r = len(a) - len(b)
-    #                 for i in range(r):
-    #                     b.append('')
-    #             for x, y in zip(a, b):
-    #                 spaces_x = 15 - (len(x))
-    #                 lst.append(f'{x}{" " * spaces_x}{y}')
-    #             lst = '\n' + '\n'.join(lst)
-    #         elif len(cmds) > 10:
-    #             a = cmds[:6]
-    #             b = cmds[6:12]
-    #             c = cmds[12:]
-    #             lst = []
-    #             if len(c) < len(b):
-    #                 r = len(b) - len(c)
-    #                 for i in range(r):
-    #                     c.append('')
-    #             for x, y, z in zip(a, b, c):
-    #                 spaces_x = 15 - (len(x))
-    #                 spaces_y = 15 - (len(y))
-    #                 lst.append(f'{x}{" " * spaces_x}{y}{" " * spaces_y}{z}')
-    #             lst = '\n' + '\n'.join(lst)
-    #         else:
-    #             lst = '\n' + '\n'.join([i for i in cmds])
-    #         return f'```{lst}```'
-    #
-    #     if ctx.invoked_subcommand is None:
-    #         prefix = database.get_prefix(ctx.guild)[0]
-    #         msg = f'> Info\nType `{prefix}help [command]` to get more information about a command'
-    #         embed = discord.Embed(title=f'Commands and Features', color=discord.Color.green(), description=msg)
-    #         embed.add_field(name='> Reputation', value=list_cmds(rep_cmds))
-    #         embed.add_field(name='> Fun', value=list_cmds(fun_cmds))
-    #         embed.add_field(name='> Queueing System', value=list_cmds(dms_cmds), inline=False)
-    #         embed.add_field(name='> Administrative', value=list_cmds(adm_cmds), inline=False)
-    #         embed.add_field(name='> Developer', value=list_cmds(dev_cmds))
-    #         embed.add_field(name='> Misc', value=list_cmds(misc_cmds))
-    #         about = f'This bot is owned and actively developed by **{self.client.get_user(self.client.owner_id).display_name}**. ' \
-    #                 f'If you\'d like to support my work, you can buy me a [coffee](https://ko-fi.com/hatchet_jackk). ' \
-    #                 f'Cheers.'
-    #         embed.add_field(name='> About', value=about, inline=False)
-    #         embed.set_thumbnail(url=self.client.user.avatar_url)
-    #         await ctx.send(embed=embed)
 
     @commands.group(aliases=['help'])
     async def help_page(self, ctx):
@@ -133,11 +82,11 @@ class Help(commands.Cog):
             paginator = BotEmbedPaginator(ctx, embeds)
             await paginator.run()
 
-    # async def help_embed(self, ctx, title, description, footer):
-    #     embed = discord.Embed(title=title, description=description, color=discord.Color.green())
-    #     embed.set_thumbnail(url=self.client.user.avatar_url)
-    #     embed.set_footer(text=footer)
-    #     await ctx.send(embed=embed)
+    async def help_embed(self, ctx, title, description, footer):
+        embed = discord.Embed(title=title, description=description, color=discord.Color.green())
+        embed.set_thumbnail(url=self.client.user.avatar_url)
+        embed.set_footer(text=footer)
+        await ctx.send(embed=embed)
 
     async def help2_embed(self, ctx, args, description, aliases=None):
         prefix = database.get_prefix(ctx.guild)[0]
@@ -163,6 +112,12 @@ class Help(commands.Cog):
         await ctx.send(embed=embed)
 
     """ misc commands """
+
+    @help_page.group(aliases=['mywarns'])
+    async def my_warnings(self, ctx):
+        args = None
+        description = 'Get a private DM that shows your warnings.'
+        await self.help2_embed(ctx, args, description, aliases=self.my_warnings.aliases)
 
     @help_page.group(aliases=['ticket'])
     async def support(self, ctx):
@@ -238,6 +193,13 @@ class Help(commands.Cog):
     async def diy(self, ctx):
         args = 'item'
         description = 'Get general information about a DIY recipe including required materials.'
+        await self.help2_embed(ctx, args, description)
+
+    @help_page.group()
+    async def art(self, ctx):
+        args = 'artwork_name'
+        description = 'Get a list of all art in ACNH. You can use the item name to get more information about it. \n' \
+                      'Example: `r:art famous painting` will give you more information about the Mona Lisa!'
         await self.help2_embed(ctx, args, description)
 
     @help_page.group()
@@ -443,6 +405,12 @@ class Help(commands.Cog):
         description = f'Gather some bells. You can do this once per day. Mae-Supporters earn 50% more bells per use.'
         await self.help2_embed(ctx, args, description)
 
+    @help_page.group(aliases=['paint'])
+    async def appraise(self, ctx):
+        args = None
+        description = f'Add some art to your collection. Art costs 10 bells each.'
+        await self.help2_embed(ctx, args, description)
+
     @help_page.group()
     async def dig(self, ctx):
         args = None
@@ -543,7 +511,11 @@ class Help(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def pf(self, ctx):
         args = '@user'
-        description = 'Get all of the available information about yourself or am optional user.'
+        description = 'Get all of the available information about yourself or am optional user.\n' \
+                      'You can update your Fruit, Flower, and Hemisphere sections using these commands:\n' \
+                      '`r:set_fruit your_fruit`\n' \
+                      '`r:set_flower your_flower`\n' \
+                      '`r:set_hemisphere your_hemisphere`'
         await self.help2_embed(ctx, args, description)
 
     @help_page.group()
