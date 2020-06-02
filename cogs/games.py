@@ -43,8 +43,8 @@ class Games(commands.Cog):
     async def add_to_economy(self, member):
         conn, curs = await self.load_db()
         with conn:
-            curs.execute("INSERT OR IGNORE INTO economy VALUES (:member, :bells)",
-                         {'member': member.id, 'bells': 0})
+            curs.execute("INSERT OR IGNORE INTO economy VALUES (:member, :bells, :fruit, :flower, :townname, :hemisphere)",
+                         {'member': member.id, 'bells': 0, 'fruit': None, 'flower': None, 'townname': None, 'hemisphere': None})
 
     async def get_bells(self, member):
         await self.add_to_economy(member)
@@ -83,6 +83,37 @@ class Games(commands.Cog):
             sql = 'INSERT OR IGNORE INTO collection_fossils(member, "acanthostega", "amber", "ammonite", "ankylo skull", "ankylo tail", "ankylo torso", "anomalocaris", "archaeopteryx", "archelon skull", "archelon tail", "australopith", "brachio chest", "brachio pelvis", "brachio skull", "brachio tail", "coprolite", "deinony tail", "deinony torso", "dimetrodon skull", "dimetrodon torso", "dinosaur track", "diplo chest", "diplo neck", "diplo pelvis", "diplo skull", "diplo tail", "diplo tail tip", "dunkleosteus", "eusthenopteron", "iguanodon skull", "iguanodon tail", "iguanodon torso", "juramaia", "left megalo side", "left ptera wing", "left quetzal wing", "mammoth skull", "mammoth torso", "megacero skull", "megacero tail", "megacero torso", "myllokunmingia", "ophthalmo skull", "ophthalmo torso", "pachy skull", "pachy tail", "parasaur skull", "parasaur tail", "parasaur torso", "plesio body", "plesio skull", "plesio tail", "ptera body", "quetzal torso", "right megalo side", "right ptera wing", "right quetzal wing", "sabertooth skull", "sabertooth tail", "shark-tooth pattern", "spino skull", "spino tail", "spino torso", "stego skull", "stego tail", "stego torso", "T. rex skull", "T. rex tail", "T. rex torso", "tricera skull", "tricera tail", "tricera torso", "trilobite") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             curs.execute(sql, (member.id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
+    async def add_collection_art(self, member):
+        conn, curs = await self.load_db()
+        with conn:
+            sql = 'INSERT OR IGNORE INTO collection_art(member, "famous painting", "quaint painting", "proper painting", "warrior statue", "sinking painting", "calm painting", "glowing painting", "graceful painting", "worthy painting", "scenic painting", "great statue", "flowery painting", "nice painting", "dynamic painting", "robust statue", "moody painting", "moving painting", "motherly statue", "familiar statue", "common painting", "perfect painting", "wild painting left half", "gallant statue", "beautiful statue", "jolly painting", "tremendous statue", "mysterious painting", "mystic statue", "scary painting", "wistful painting", "informative statue", "wild painting right half", "solemn painting", "warm painting", "amazing painting", "valiant statue", "detailed painting", "twinkling painting", "academic painting", "basic painting", "serene painting", "rock-head statue", "ancient statue") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            curs.execute(sql, (member.id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
+    async def get_art_collection(self, member):
+        await self.add_collection_art(member)
+        conn, curs = await self.load_db()
+        curs.execute('SELECT * FROM collection_art WHERE member = (:member)',
+                     {'member': member.id})
+        found = len([i for i in curs.fetchone() if i != 0]) - 1
+        return found
+
+    async def check_collection_art(self, member, item):
+        item = f'"{item}"'
+        conn, curs = await self.load_db()
+        curs.execute(f"SELECT 1 FROM collection_art WHERE member = (:member) AND {item} = 1",
+                     {'member': member.id, 'item': item})
+        value = curs.fetchone()
+        if value is not None:
+            return True
+        return False
+
+    async def update_collection_art(self, member, item):
+        item = f'"{item}"'
+        conn, curs = await self.load_db()
+        with conn:
+            curs.execute(f"UPDATE collection_art SET {item} = 1 WHERE member = (:member)",
+                         {'member': member.id})
+
     async def get_fossil_collection(self, member):
         await self.add_collection_fossils(member)
         conn, curs = await self.load_db()
@@ -101,13 +132,12 @@ class Games(commands.Cog):
             return True
         return False
 
-    async def get_fish_collection(self, member):
-        await self.add_collection_fish(member)
+    async def update_collection_fossils(self, member, item):
+        item = f'"{item}"'
         conn, curs = await self.load_db()
-        curs.execute('SELECT * FROM collection_fish WHERE member = (:member)',
-                     {'member': member.id})
-        caught = len([i for i in curs.fetchone() if i != 0]) - 1
-        return caught
+        with conn:
+            curs.execute(f"UPDATE collection_fossils SET {item} = 1 WHERE member = (:member)",
+                         {'member': member.id})
 
     async def get_insects_collection(self, member):
         await self.add_collection_insects(member)
@@ -116,27 +146,6 @@ class Games(commands.Cog):
                      {'member': member.id})
         caught = len([i for i in curs.fetchone() if i != 0]) - 1
         return caught
-
-    async def update_collection_fossils(self, member, item):
-        item = f'"{item}"'
-        conn, curs = await self.load_db()
-        with conn:
-            curs.execute(f"UPDATE collection_fossils SET {item} = 1 WHERE member = (:member)",
-                         {'member': member.id})
-
-    async def update_collection_insects(self, member, item):
-        item = f'"{item}"'
-        conn, curs = await self.load_db()
-        with conn:
-            curs.execute(f"UPDATE collection_insects SET {item} = 1 WHERE member = (:member)",
-                         {'member': member.id})
-
-    async def update_collection_fish(self, member, item):
-        item = f'"{item}"'
-        conn, curs = await self.load_db()
-        with conn:
-            curs.execute(f"UPDATE collection_fish SET {item} = 1 WHERE member = (:member)",
-                         {'member': member.id})
 
     async def check_collection_insects(self, member, item):
         item = f'"{item}"'
@@ -148,6 +157,21 @@ class Games(commands.Cog):
             return True
         return False
 
+    async def update_collection_insects(self, member, item):
+        item = f'"{item}"'
+        conn, curs = await self.load_db()
+        with conn:
+            curs.execute(f"UPDATE collection_insects SET {item} = 1 WHERE member = (:member)",
+                         {'member': member.id})
+
+    async def get_fish_collection(self, member):
+        await self.add_collection_fish(member)
+        conn, curs = await self.load_db()
+        curs.execute('SELECT * FROM collection_fish WHERE member = (:member)',
+                     {'member': member.id})
+        caught = len([i for i in curs.fetchone() if i != 0]) - 1
+        return caught
+
     async def check_collection_fish(self, member, item):
         item = f'"{item}"'
         conn, curs = await self.load_db()
@@ -158,12 +182,18 @@ class Games(commands.Cog):
             return True
         return False
 
+    async def update_collection_fish(self, member, item):
+        item = f'"{item}"'
+        conn, curs = await self.load_db()
+        with conn:
+            curs.execute(f"UPDATE collection_fish SET {item} = 1 WHERE member = (:member)",
+                         {'member': member.id})
+
     """
     Games
     """
 
     @commands.command(aliases=['pf'])
-    @commands.has_any_role('ADMIN', 'MODERATOR', 'Dev', 'SERVER OWNER')
     async def _profile(self, ctx, member: discord.Member = None):
         if member is None:
             member = ctx.author
@@ -172,15 +202,69 @@ class Games(commands.Cog):
         total_insects = await self.get_insects_collection(member)
         total_fish = await self.get_fish_collection(member)
         total_fossils = await self.get_fossil_collection(member)
+        total_art = await self.get_art_collection(member)
+
+        conn, curs = await self.load_db()
+        curs.execute(f"SELECT fruit FROM economy WHERE member = {member.id}")
+        fruit = curs.fetchone()
+        if fruit is not None:
+            fruit = fruit[0]
+
+        curs.execute(f"SELECT flower FROM economy WHERE member = {member.id}")
+        flower = curs.fetchone()
+        if flower is not None:
+            flower = flower[0]
+
+        # curs.execute(f"SELECT townname FROM economy WHERE member = {ctx.author.id}")
+        # townname = curs.fetchone()
+        # if townname is not None:
+        #     townname = townname[0]
+
+        curs.execute(f"SELECT hemisphere FROM economy WHERE member = {member.id}")
+        hemisphere = curs.fetchone()
+        if hemisphere is not None:
+            hemisphere = hemisphere[0]
+
         karma = database.get_karma(member)
-        embed = discord.Embed(color=discord.Color.green(), description=f'{member} :white_small_square: Karma: {karma}')
+
+        description = f'{member} :white_small_square: Karma: {karma} :white_small_square: Joined: {tools.format_date(member.joined_at, 1)}'
+
+        one_day = 86400
+        one_month = one_day * 30
+        two_months = one_month * 2
+        four_months = one_month * 4
+        six_months = one_month * 6
+        eight_months = one_month * 8
+        ten_months = one_month * 10
+        one_year = one_month * 12
+
+        joined_at = tools.to_seconds(member.joined_at)
+        if joined_at <= one_month:
+            description = '🌱 :white_small_square: ' + description
+        elif one_month < joined_at <= two_months:
+            description = '🌼 :white_small_square: ' + description
+        elif two_months < joined_at <= four_months:
+            description = '🌻 :white_small_square: ' + description
+        elif four_months < joined_at <= six_months:
+            description = '🌺 :white_small_square: ' + description
+        elif six_months < joined_at <= eight_months:
+            description = '🌷 :white_small_square: ' + description
+        elif eight_months < joined_at <= ten_months:
+            description = '🌸 :white_small_square: ' + description
+        elif ten_months < joined_at <= one_year:
+            description = '🌲 :white_small_square: ' + description
+
+        embed = discord.Embed(color=discord.Color.green(), description=description)
         embed.set_author(name=f'{member.display_name}\'s Profile', icon_url=member.avatar_url)
         embed.add_field(name=f'Bells', value=f'{bell_icon} {bells}')
         embed.add_field(name='Insects Caught', value=f':bug: {str(total_insects)}/80')
         embed.add_field(name='Fish Caught', value=f':blowfish: {str(total_fish)}/80')
-        embed.add_field(name='Art Found', value=f':paintbrush: coming soon')
-        embed.add_field(name='Fossils Found', value=f':bone: {total_fossils}/73')
+        embed.add_field(name='Art Found', value=f':paintbrush: {str(total_art)}/43')
+        embed.add_field(name='Fossils Found', value=f':bone: {str(total_fossils)}/73')
         embed.add_field(name='\u200b', value='\u200b')
+        embed.add_field(name='Fruit', value=fruit)
+        embed.add_field(name='Flower', value=f'{flower}')
+        embed.add_field(name='Hemisphere', value=hemisphere)
 
         turnip_emoji = self.client.get_emoji(694822764699320411)
         if turnip_emoji is None:
@@ -222,25 +306,43 @@ class Games(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command()
-    @commands.is_owner()
-    async def bells(self, ctx):
-        bells = await self.get_bells(ctx.author)
-        await ctx.send(embed=tools.single_embed(f'You have **{bells}** bells.'))
+    async def set_fruit(self, ctx, *, fruit):
+        conn, curs = await self.load_db()
+        with conn:
+            curs.execute(f"UPDATE economy SET fruit = (:fruit) WHERE member = {ctx.author.id}",
+                         {'fruit': fruit})
+        await ctx.send(embed=tools.single_embed('Your profile has been updated.'))
 
     @commands.command()
-    @commands.is_owner()
+    async def set_flower(self, ctx, *, flower):
+        conn, curs = await self.load_db()
+        with conn:
+            curs.execute(f"UPDATE economy SET flower = (:flower) WHERE member = {ctx.author.id}",
+                         {'flower': flower})
+        await ctx.send(embed=tools.single_embed('Your profile has been updated.'))
+
+    @commands.command()
+    async def set_hemisphere(self, ctx, *, hemisphere):
+        conn, curs = await self.load_db()
+        with conn:
+            curs.execute(f"UPDATE economy SET hemisphere = (:hemisphere) WHERE member = {ctx.author.id}",
+                         {'hemisphere': hemisphere})
+        await ctx.send(embed=tools.single_embed('Your profile has been updated.'))
+
+    @commands.command()
+    @commands.has_role('mae-supporters')
     async def get_bugs(self, ctx):
         total = await self.get_insects_collection(ctx.author)
         await ctx.send(embed=tools.single_embed(f'You\'ve caught {total} out of 80 insects!'))
 
     @commands.command()
-    @commands.is_owner()
+    @commands.has_role('mae-supporters')
     async def get_fish(self, ctx):
         total = await self.get_fish_collection(ctx.author)
         await ctx.send(embed=tools.single_embed(f'You\'ve caught {total} out of 80 fish!'))
 
     @commands.command()
-    @commands.has_any_role('ADMIN', 'MODERATOR', 'Dev', 'SERVER OWNER')
+    @commands.has_role('mae-supporters')
     @commands.cooldown(1, 60*60*24, commands.BucketType.user)
     async def bells(self, ctx):
         await self.add_to_economy(ctx.author)
@@ -259,8 +361,7 @@ class Games(commands.Cog):
         return
 
     @commands.command()
-    # @commands.has_any_role('ADMIN', 'MODERATOR', 'Dev', 'SERVER OWNER')
-    @commands.is_owner()
+    @commands.has_role('mae-supporters')
     async def dig(self, ctx):
         bells = await self.get_bells(ctx.author)
         if bells < 10:
@@ -279,12 +380,12 @@ class Games(commands.Cog):
             await self.update_collection_fossils(ctx.author, discovered[0])
             msg = f'You discovered: **{discovered[0]}**!'
         thumbnail = f'{image}Furniture/{discovered[1]}.png'
-        embed = discord.Embed(description=msg, color=discord.Color.purple())
+        embed = discord.Embed(title='You bought the rights to dig for 10 bells!', description=msg, color=discord.Color.purple())
         embed.set_image(url=thumbnail)
         await ctx.send(embed=embed)
 
     @commands.command()
-    @commands.is_owner()
+    @commands.has_role('mae-supporters')
     async def net(self, ctx):
         bells = await self.get_bells(ctx.author)
         if bells < 10:
@@ -298,6 +399,7 @@ class Games(commands.Cog):
 
         insects = [[k['name'], k["critterpediaFilename"], k['spawnRate']] for k in data]
 
+        title = 'You bought some bug bait for 10 bells!'
         verify = False
         while not verify:
             try:
@@ -314,7 +416,7 @@ class Games(commands.Cog):
                             await self.update_collection_insects(ctx.author, caught[0])
                             msg = f'You caught: **{caught[0]}**! *RARE*'
                         thumbnail = f'{image}insects/{caught[1]}.png'
-                        embed = discord.Embed(description=msg, color=discord.Color.purple())
+                        embed = discord.Embed(title=title, description=msg, color=discord.Color.purple())
                         embed.set_image(url=thumbnail)
                         await ctx.send(embed=embed)
                         verify = True
@@ -327,7 +429,7 @@ class Games(commands.Cog):
                             await self.update_collection_insects(ctx.author, caught[0])
                             msg = f'You caught: **{caught[0]}**! *UNCOMMON*'
                         thumbnail = f'{image}insects/{caught[1]}.png'
-                        embed = discord.Embed(description=msg, color=discord.Color.blue())
+                        embed = discord.Embed(title=title, description=msg, color=discord.Color.blue())
                         embed.set_image(url=thumbnail)
                         await ctx.send(embed=embed)
                         verify = True
@@ -338,7 +440,7 @@ class Games(commands.Cog):
                         msg = f'You caught: **{caught[0]}**! *COMMON*'
                         await self.update_collection_insects(ctx.author, caught[0])
                     thumbnail = f'{image}insects/{caught[1]}.png'
-                    embed = discord.Embed(description=msg, color=discord.Color.green())
+                    embed = discord.Embed(title=title, description=msg, color=discord.Color.green())
                     embed.set_image(url=thumbnail)
                     await ctx.send(embed=embed)
                     verify = True
@@ -346,7 +448,7 @@ class Games(commands.Cog):
                 pass
 
     @commands.command()
-    @commands.is_owner()
+    @commands.has_role('mae-supporters')
     async def cast(self, ctx):
         bells = await self.get_bells(ctx.author)
         if bells < 10:
@@ -354,6 +456,7 @@ class Games(commands.Cog):
             return
         await self.modify_bells(ctx.author, -10)
         await self.add_collection_fish(ctx.author)
+        title = 'You bought some fish bait for 10 bells!'
         async with aiohttp.ClientSession() as session:
             if random.randint(0, 5) == 0:
                 f = await self.fetch(session, will_url + 'fish/sea%20bass')
@@ -364,7 +467,7 @@ class Games(commands.Cog):
                     await self.update_collection_fish(ctx.author, data['name'])
                     msg = f'You caught: **{data["name"]}**! *COMMON*'
                 thumbnail = f'{image}Fish/{data["critterpediaFilename"]}.png'
-                embed = discord.Embed(description=msg, color=discord.Color.green())
+                embed = discord.Embed(title=title, description=msg, color=discord.Color.green())
                 embed.set_image(url=thumbnail)
                 await ctx.send(embed=embed)
                 return
@@ -389,7 +492,7 @@ class Games(commands.Cog):
                             await self.update_collection_fish(ctx.author, caught[0])
                             msg = f'You caught: **{caught[0]}**! *RARE*'
                         thumbnail = f'{image}Fish/{caught[1]}.png'
-                        embed = discord.Embed(description=msg, color=discord.Color.purple())
+                        embed = discord.Embed(title=title, description=msg, color=discord.Color.purple())
                         embed.set_image(url=thumbnail)
                         await ctx.send(embed=embed)
                         verify = True
@@ -403,7 +506,7 @@ class Games(commands.Cog):
                             await self.update_collection_fish(ctx.author, caught[0])
                             msg = f'You caught: **{caught[0]}**! *UNCOMMON*'
                         thumbnail = f'{image}Fish/{caught[1]}.png'
-                        embed = discord.Embed(description=msg, color=discord.Color.blue())
+                        embed = discord.Embed(title=title, description=msg, color=discord.Color.blue())
                         embed.set_image(url=thumbnail)
                         await ctx.send(embed=embed)
                         verify = True
@@ -414,15 +517,42 @@ class Games(commands.Cog):
                         await self.update_collection_fish(ctx.author, caught[0])
                         msg = f'You caught: **{caught[0]}**! *COMMON*'
                     thumbnail = f'{image}Fish/{caught[1]}.png'
-                    embed = discord.Embed(description=msg, color=discord.Color.green())
+                    embed = discord.Embed(title=title, description=msg, color=discord.Color.green())
                     embed.set_image(url=thumbnail)
                     await ctx.send(embed=embed)
                     verify = True
             except IndexError:
                 pass
 
+    @commands.command(aliases=['paint'])
+    @commands.has_role('mae-supporters')
+    async def appraise(self, ctx):
+        bells = await self.get_bells(ctx.author)
+        if bells < 10:
+            await ctx.send(embed=tools.single_embed_neg('You do not have enough bells to buy any art!'))
+            return
+        await self.modify_bells(ctx.author, -10)
+        await self.add_collection_art(ctx.author)
+        async with aiohttp.ClientSession() as session:
+            url = 'http://157.245.28.81/artwork/random'
+            f = await self.fetch(session, url)
+            data = json.loads(f)
+
+        description = f'**Artist**: {data["artist"]}\n' \
+                      f'**Title**: {data["realArtworkTitle"]}'
+        embed = discord.Embed(title=f'You appraised \"{data["name"]}\" for 10 bells', description=description, color=discord.Color.green())
+        if data['real'] is False:
+            embed.add_field(name='Appraisal', value=':x: Oh no! It was a fake!')
+        else:
+            embed.add_field(name='Appraisal', value=':white_check_mark: Yes! It\'s real!')
+            await self.update_collection_art(ctx.author, data['name'])
+            embed.set_footer(text='You add the artwork to your collection.')
+        url = f'http://williamspires.co.uk:9876/Furniture/{data["filename"]}.png'
+        embed.set_image(url=url)
+        await ctx.send(embed=embed)
+
     @commands.command(aliases=['slots'])
-    @commands.has_any_role('ADMIN', 'MODERATOR', 'Dev', 'SERVER OWNER')
+    @commands.has_any_role('ADMIN', 'MODERATOR', 'Dev', 'SERVER OWNER', 'mae-supporters')
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def slot(self, ctx, bet=10):
         if bet < 1:
@@ -449,9 +579,9 @@ class Games(commands.Cog):
         slot3 = fruits[random.randint(0, 8)]
 
         if bet == 1:
-            title = f'Betting {bet} bell!'
+            title = f'{ctx.author.display_name} bet {bet} bell!'
         else:
-            title = f'Betting {bet} bells!'
+            title = f'{ctx.author.display_name} bet {bet} bells!'
         winning_scenarios = f'🍒 x3 ........................ Win 10x!\n' \
                             f'Match all 3 .............. Win 4x!\n' \
                             f'Match any 2 ............ Win 2x!'
@@ -493,10 +623,10 @@ class Games(commands.Cog):
 
         jackpot = False
         if all([slot1, slot2, slot3]) == ':cherry:':
-            winnings = bet * 10
+            winnings = int(bet * 10)
             jackpot = True
         elif all([slot1, slot2]) == slot3:
-            winnings = bet * 4
+            winnings = int(bet * 4)
         elif slot1 == slot2 or slot1 == slot3 or slot2 == slot3:
             winnings = int(bet * 2)
         else:
@@ -506,7 +636,7 @@ class Games(commands.Cog):
 
         if int(winnings) > 0:
             bells = await self.get_bells(ctx.author)
-            msg = f'You\'ve won **{winnings - bet}** bells!'
+            msg = f'You\'ve won **{winnings}** bells!'
             embed = discord.Embed(title=title, color=discord.Color.green())
             embed.add_field(name='\u200b', value=f'{slot1}')
             embed.add_field(name='\u200b', value=f'{slot2}')
@@ -538,7 +668,8 @@ class Games(commands.Cog):
     @bells.error
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(embed=tools.single_embed_neg(f'You can only gather once per day!'))
+            retry_after = tools.display_time(error.retry_after)
+            await ctx.send(embed=tools.single_embed_neg(f'You can only gather once per day! Try again in {retry_after}'))
 
     @slot.error
     async def on_command_error(self, ctx, error):
