@@ -173,11 +173,11 @@ class Rep(commands.Cog):
             await ctx.send(embed=tools.single_embed(msg))
             await ctx.message.delete()
             return
-        if len(ctx.message.attachments) < 1:
-            msg = f'Your negative review is incomplete. Please attach a screenshot or picture verifying your claim.'
-            await ctx.author.send(embed=tools.single_embed(msg))
-            await ctx.message.delete()
-            return
+        # if len(ctx.message.attachments) < 1:
+        #     msg = f'Your negative review is incomplete. Please attach a screenshot or picture verifying your claim.'
+        #     await ctx.author.send(embed=tools.single_embed(msg))
+        #     await ctx.message.delete()
+        #     return
 
         if not database.in_members_table(ctx.author):
             database.add_member(ctx.author)
