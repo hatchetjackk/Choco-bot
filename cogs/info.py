@@ -4,6 +4,7 @@ import json
 import time
 import util.db as db
 import util.tools as tools
+import util.db as database
 from datetime import datetime
 from discord.ext import commands
 
@@ -136,10 +137,25 @@ class Information(commands.Cog):
         embed.set_thumbnail(url=member.avatar_url)
         await ctx.send(embed=embed)
 
-    @commands.command()
-    @commands.cooldown(5, 60, commands.BucketType.user)
-    async def profile(self, ctx, member: discord.Member):
-        return
+    @commands.command(aliases=['mywarns'])
+    async def my_warnings(self, ctx):
+        if not database.in_warnings_table(ctx.author, ctx.guild):
+            msg = f'You have `0` warnings.'
+            embed = discord.Embed(color=discord.Color.green(), description=msg)
+            embed.set_thumbnail(url=ctx.author.avatar_url)
+            await ctx.author.send(embed=embed)
+            await ctx.send(embed=tools.single_embed('A private DM has been sent.'), delete_after=10)
+        else:
+            warnings, messages = database.get_warnings(ctx.author)
+            fmt = []
+            for m in messages:
+                fmt.append(f'`{m[0]}.` {m[4]} - {m[3]} ')
+            if len(fmt) > 0:
+                msg = f'__Past Warnings__\n' + '\n'.join(fmt)
+                embed = discord.Embed(color=discord.Color.red(), description=msg)
+                embed.set_author(name=f'{ctx.author.display_name} ({ctx.author})', icon_url=ctx.author.avatar_url)
+                await ctx.author.send(embed=embed)
+                await ctx.send(embed=tools.single_embed('A private DM has been sent.'), delete_after=10)
 
     """
     Reporting Commands
@@ -346,6 +362,14 @@ class Information(commands.Cog):
 
     @commands.command()
     async def report(self, ctx, member: discord.Member, *, report: str = None):
+        if len(ctx.message.attachments) < 1:
+            msg = f'Your negative review is incomplete. Please attach a screenshot or picture verifying your claim.'
+            try:
+                await ctx.author.send(embed=tools.single_embed(msg))
+            except discord.Forbidden:
+                await ctx.send(embed=tools.single_embed(msg), delete_after=5)
+            await ctx.message.delete()
+            return
         channel = db.get_administrative(ctx.guild)
         embed = discord.Embed(title='Report', description=report, color=discord.Color.red())
         reporter = f'Name: {ctx.author.mention} ({ctx.author})\n' \
@@ -367,6 +391,7 @@ class Information(commands.Cog):
         embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar_url)
         await channel.send(embed=embed)
         await ctx.message.delete()
+        await ctx.send(embed=tools.single_embed(f'Your report has been delivered. Thank you.'), delete_after=5)
 
     @commands.group()
     async def incident(self, ctx):
